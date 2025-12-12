@@ -33,11 +33,24 @@ Each plan should include:
 4. **Date** - Creation and last updated dates
 5. **Summary** - Brief overview (2-3 sentences)
 6. **Context** - Background and motivation
-7. **Goals** - What this plan aims to achieve
-8. **Non-Goals** - Explicitly out of scope
-9. **Approach** - High-level description of the solution (no code)
-10. **Risks & Mitigations** - Known risks and how to address them
-11. **References** - Links to related plans, tasks, or external resources
+7. **User Roles** - Who will use this feature and their needs
+8. **User Stories** - Scenarios describing user interactions
+9. **Goals** - What this plan aims to achieve
+10. **Non-Goals** - Explicitly out of scope
+11. **Acceptance Criteria** - Testable requirements using EARS format (see below)
+12. **Approach** - High-level description of the solution (no code)
+13. **Risks & Mitigations** - Known risks and how to address them
+14. **References** - Links to related plans, tasks, or external resources
+
+## EARS Format for Acceptance Criteria
+
+Use the EARS (Easy Approach to Requirements Syntax) format for testable criteria:
+
+- **Event-driven**: "When [event], the system shall [response]"
+- **State-driven**: "While [state], the system shall [behavior]"
+- **Conditional**: "If [condition], then the system shall [action]"
+
+This ensures acceptance criteria are unambiguous and directly testable.
 
 ## Index
 

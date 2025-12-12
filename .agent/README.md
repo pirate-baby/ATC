@@ -1,17 +1,17 @@
-# ATC Documentation
+# ATC Agent Guidance
 
 **Automated Team Collaboration** - Redefining SDLC for the AI-enabled age.
 
 > ATC: Where software takes flight under human guidance.
 
-## Overview
+## Purpose
 
-ATC combines project management, version control (git) management, and pair programming into a unified platform that redefines the modern software development lifecycle.
+This directory contains agent guidance for bootstrapping ATC development. It defines **what** to build (plans) and **how** to build it (tasks) until ATC can manage itself.
 
-## Documentation Structure
+## Structure
 
 ```
-docs/
+.agent/
 ├── README.md          # This file
 ├── plans/             # Strategic planning documents (what/why)
 │   └── README.md      # Plan guidelines and index
@@ -21,9 +21,9 @@ docs/
 
 ## Workflow
 
-1. **Plan First** - Define goals, architecture, and rules in `/plans`
-2. **Task Second** - Break plans into actionable tasks in `/tasks`
-3. **Execute** - Implement tasks with full traceability back to plans
+1. **Plan** - Define features, architecture, and rules in `plans/`
+2. **Task** - Break plans into actionable work items in `tasks/`
+3. **Execute** - Implement tasks using TDD with full traceability to plans
 
 ## Tech Stack
 
