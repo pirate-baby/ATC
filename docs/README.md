@@ -2,11 +2,11 @@
 
 **Automated Team Collaboration** - Redefining SDLC for the AI-enabled age.
 
-> ATC: Where code takes flight under AI guidance.
+> ATC: Where software takes flight under human guidance.
 
 ## Overview
 
-ATC combines project management, version control (git) management, and pair programming into a unified platform modeled after Air Traffic Control interfaces. Just as air traffic controllers orchestrate complex flight patterns with precision and clarity, ATC orchestrates the modern software development lifecycle.
+ATC combines project management, version control (git) management, and pair programming into a unified platform that redefines the modern software development lifecycle.
 
 ## Documentation Structure
 
