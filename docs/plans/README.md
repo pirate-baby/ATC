@@ -12,6 +12,8 @@ Plans define **what** we want to build and **why**. They capture:
 - Rules of engagement
 - Success criteria
 
+**Important**: Plans describe features, functionality, and architectural patterns in prose. They should **not** include code, pseudo-code, or specific file change instructions. Implementation details belong in tasks.
+
 ## Naming Convention
 
 ```
@@ -33,7 +35,7 @@ Each plan should include:
 6. **Context** - Background and motivation
 7. **Goals** - What this plan aims to achieve
 8. **Non-Goals** - Explicitly out of scope
-9. **Design/Approach** - Detailed description
+9. **Approach** - High-level description of the solution (no code)
 10. **Risks & Mitigations** - Known risks and how to address them
 11. **References** - Links to related plans, tasks, or external resources
 

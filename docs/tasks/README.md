@@ -19,6 +19,18 @@ Plans (what/why) --> Tasks (how/when)
 
 Tasks should always reference the plan(s) they implement.
 
+## Task Execution Workflow
+
+When executing a task, follow this test-driven development (TDD) workflow:
+
+1. **Identify test changes** - Determine what new tests need to be written, and which existing tests need to be modified or removed to support the new behavior
+2. **Update tests** - Write or modify the tests per step 1
+3. **Verify test failures** - Run tests and confirm they fail for the expected reasons
+4. **Implement the feature** - Make application changes to pass all tests
+5. **Refine the code** - Improve quality, readability, and adherence to best practices
+6. **Lint and format** - Run linters and formatters to ensure code consistency
+7. **Mark ready for review** - Task is complete and ready for human review
+
 ## Naming Convention
 
 ```
