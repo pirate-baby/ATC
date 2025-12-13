@@ -139,67 +139,108 @@ Create a multi-service Docker Compose configuration with profiles for developmen
 
 ### 3. Knowledge Base Subagent System
 
+**Problem**: The knowledge base may contain dozens to hundreds of documents. Creating one agent file per document is unmaintainable.
+
 **Implementation Options Evaluated:**
 
-1. **Static Agent Files** (Recommended): Create `.claude/agents/<doc-name>.md` files
-   - Each file contains frontmatter (name, description, model) and system prompt
-   - System prompt instructs agent to be expert on specific document
-   - Agent reads document content at invocation time
-   - Pros: Simple, works with existing Claude infrastructure
-   - Cons: Requires one file per knowledge document
+1. **Static Agent Files (1:1)**: Create `.claude/agents/<doc-name>.md` per document
+   - Pros: Works with existing infrastructure
+   - Cons: **Unmaintainable at scale** - requires N agent files for N documents, all nearly identical
 
-2. **Dynamic CLI Invocation**: Use `--agents` flag with JSON
-   - Could theoretically generate agent definitions at runtime
-   - Pros: Flexible, single configuration point
-   - Cons: Complex to implement, may not integrate with file-based workflow
+2. **Single Generic Agent + Task Tool Prompt** (Recommended): One `kb-expert` agent that receives the document path via the Task tool's `prompt` parameter
+   - The Task tool accepts a dynamic `prompt` parameter when invoking agents
+   - The orchestrating Claude passes the document path in the prompt
+   - Single agent file handles all knowledge documents
+   - Pros: Scales to hundreds of documents, zero maintenance overhead
+   - Cons: Requires orchestrator to know document paths
 
-3. **Custom Slash Commands**: Use `.claude/commands/` directory
-   - Not suitable: commands are prompts, not agents with separate context
-   - Would pollute primary context
+3. **Parameterized Slash Command**: Use `.claude/commands/kb.md` with `$ARGUMENTS`
+   - Command: `/kb architecture` → reads `.agent/knowledge_base/architecture.md`
+   - Uses `$ARGUMENTS` to construct file path dynamically
+   - Pros: Simple user interface, single file
+   - Cons: Runs in primary context (not isolated), less suitable for agent-to-agent queries
 
-**Recommended Approach - Static Agent Files:**
+4. **MCP Server**: Build custom MCP server exposing knowledge base as tools
+   - Each document becomes a callable tool
+   - Pros: Very flexible, good for complex queries
+   - Cons: Over-engineered for this use case, requires server maintenance
 
-Create `.claude/agents/knowledge_base/` directory with agent files:
-```
-.claude/agents/knowledge_base/
-├── architecture.md      # Expert on architecture.md
-├── api-design.md        # Expert on api-design.md
-└── ...                   # One per knowledge doc
-```
+**Recommended Approach - Single Generic Agent:**
 
-Each agent file structure:
+Create one agent file: `.claude/agents/kb-expert.md`
+
 ```markdown
 ---
-name: kb-<document-slug>
-description: Expert on <document-name> - invoke when questions relate to <topic>
-model: inherit
+name: kb-expert
+description: Knowledge base expert. Use this agent when you need accurate information from any document in .agent/knowledge_base/. Pass the document filename in your prompt.
+tools: Read, Glob
+model: haiku
 ---
 
-You are an expert on the document `.agents/knowledge_base/<document-name>.md`.
+You are an expert on ATC knowledge base documents located in `.agent/knowledge_base/`.
 
-When invoked:
-1. Read the document using the Read tool
-2. Answer questions based solely on document content
-3. Provide succinct, accurate responses
-4. Quote relevant sections when helpful
-5. Acknowledge if information is not in the document
+## Instructions
+
+1. **Identify the document**: The orchestrator will specify which document to consult in the task prompt (e.g., "Consult architecture.md about...")
+2. **Read the document**: Use the Read tool to load `.agent/knowledge_base/<filename>.md`
+3. **Answer accurately**: Base your response solely on the document content
+4. **Be succinct**: Provide concise, direct answers
+5. **Quote when helpful**: Reference specific sections for clarity
+6. **Acknowledge limits**: If information is not in the document, say so clearly
+
+## Response Format
+
+- Lead with the direct answer
+- Support with relevant quotes or section references
+- Keep responses focused and brief
+- If the requested document doesn't exist, report that clearly
 ```
 
-**Tradeoff Decision**: While a dynamic approach would be more elegant (single config generating agents for all docs), the static approach:
-- Works immediately with Claude's existing agent system
-- Provides explicit control over each agent's behavior
-- Allows customization per document type
-- Integrates with version control naturally
+**Usage by Orchestrating Agent:**
+
+When the primary Claude needs knowledge base information, it invokes:
+```
+Task(
+  subagent_type: "kb-expert",
+  prompt: "Consult architecture.md: What is the recommended database schema for user sessions?"
+)
+```
+
+The kb-expert agent:
+1. Parses the document name from the prompt
+2. Reads `.agent/knowledge_base/architecture.md`
+3. Returns a succinct answer based on document content
+
+**Why This Scales:**
+- 1 agent file serves unlimited documents
+- No synchronization needed between agents and documents
+- Adding new knowledge docs requires zero agent changes
+- Uses haiku model for fast, cost-effective responses
+
+**Supplementary Slash Command (Optional):**
+
+For direct user queries, add `.claude/commands/kb.md`:
+```markdown
+---
+description: Query a knowledge base document
+argument-hint: <document-name> <question>
+---
+
+Read the document `.agent/knowledge_base/$1.md` and answer: $2
+```
+
+Usage: `/kb architecture What database should we use?`
 
 ## Risks & Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | Port conflicts between worktrees | High | Port offset algorithm with validation |
-| Knowledge agents become stale | Medium | Agents read documents at runtime, not cached |
+| Knowledge agents become stale | Low | Single generic agent reads docs at runtime; no caching |
 | Docker resource leaks | Medium | Dual-filter cleanup (labels + name patterns) |
 | Port offset exhaustion (6+ worktrees) | Low | Clear error messaging; unlikely use case |
-| Agent files out of sync with knowledge_base | Medium | Documentation; could add validation script |
+| Orchestrator doesn't know doc names | Medium | Glob tool in kb-expert; could add `/kb-list` command |
+| Large knowledge docs exceed context | Medium | Haiku model has sufficient context; can chunk if needed |
 
 ## Implementation Tasks
 
@@ -222,14 +263,15 @@ The following tasks should be created to implement this plan:
    - Ensure isolation (only affects current project)
 
 4. **Task: Set Up Knowledge Base Structure**
-   - Create `.agents/knowledge_base/` directory
-   - Create initial knowledge documents
-   - Document the knowledge base system
+   - Create `.agent/knowledge_base/` directory
+   - Create initial knowledge documents (project overview, architecture, etc.)
+   - Document the knowledge base conventions
 
-5. **Task: Create Knowledge Base Agent Template**
-   - Design agent file template
-   - Create generator script (optional) for new docs
-   - Document agent creation process
+5. **Task: Create Knowledge Base Expert Agent**
+   - Create single `.claude/agents/kb-expert.md` agent file
+   - Configure with Read and Glob tools, haiku model
+   - Test with sample knowledge documents
+   - Optionally create `/kb` slash command for direct user queries
 
 6. **Task: Create Dev Convenience Script**
    - Combine startup + docker compose up
@@ -241,7 +283,8 @@ The following tasks should be created to implement this plan:
 - [Captain's Log - utils/start.sh](/Users/ethan/Repos/captains-log/utils/start.sh) - Reference implementation for port offset and project naming
 - [Captain's Log - docker-compose.yml](/Users/ethan/Repos/captains-log/docker-compose.yml) - Reference for port variable substitution
 - [Claude Code Agent Example](/Users/ethan/Repos/captains-log/.claude/agents/code-simplifier.md) - Reference for agent file format
-- [Claude CLI --agents flag](claude --help) - JSON agent definition format
+- [Claude Code Subagents Documentation](https://code.claude.com/docs/en/sub-agents) - Official subagent documentation
+- [Claude Code Slash Commands](https://code.claude.com/docs/en/slash-commands) - Custom command documentation
 
 ## Appendix A: Port Offset Examples
 
@@ -254,37 +297,10 @@ The following tasks should be created to implement this plan:
 | 4 | 48000 | 43000 | 45432 |
 | 5 | 58000 | 53000 | 55432 |
 
-## Appendix B: Agent File Template
+## Appendix B: Knowledge Base Agent File
 
-```markdown
----
-name: kb-<slug>
-description: Knowledge expert on <Document Title>. Invoke when questions relate to <topics covered>.
-model: inherit
-color: blue
----
-
-You are an expert on the ATC knowledge base document: `.agents/knowledge_base/<filename>.md`
-
-## Your Expertise
-
-You have deep knowledge of <document subject>. You can answer questions about:
-- <topic 1>
-- <topic 2>
-- <topic 3>
-
-## Instructions
-
-1. **First**: Read the knowledge document using the Read tool
-2. **Answer**: Based solely on the document content
-3. **Be Succinct**: Provide concise, direct answers
-4. **Quote**: Reference specific sections when helpful
-5. **Acknowledge Limits**: If information is not in the document, say so
-
-## Response Format
-
-- Lead with the direct answer
-- Support with relevant quotes or references
-- Keep responses focused and brief
-- Use bullet points for multiple items
-```
+The single `kb-expert` agent is shown in the Approach section above. This agent:
+- Handles all knowledge base documents dynamically
+- Receives the document name via the Task tool's prompt parameter
+- Uses haiku model for fast, cost-effective responses
+- Has Read and Glob tools for document access
