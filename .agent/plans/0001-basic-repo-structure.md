@@ -69,25 +69,27 @@ As a Claude agent, I want to query specific knowledge base documents through spe
 
 ### Worktree Namespacing
 
-**AC-5**: When `utils/startup.sh` executes, the system shall set `COMPOSE_PROJECT_NAME` to a sanitized version of the current git branch name.
+**AC-5**: When `utils/startup.sh` executes, the system shall calculate `COMPOSE_PROJECT_NAME` as a sanitized version of the current git branch name and persist it to the worktree's `.env` file.
 
-**AC-6**: When `utils/startup.sh` executes, the system shall calculate `PORT_OFFSET` as the first available offset (0-5) not in use by other Docker containers.
+**AC-6**: When `utils/startup.sh` executes, the system shall calculate `PORT_OFFSET` as the first available offset (0-5) not in use by other Docker containers and persist it to the worktree's `.env` file.
 
 **AC-7**: If all port offsets (0-5) are in use, then the system shall exit with an error message.
 
-**AC-8**: While `PORT_OFFSET` is set, the system shall prepend it to all exposed port numbers.
+**AC-8**: While `PORT_OFFSET` is set in `.env`, the system shall prepend it to all exposed port numbers in Docker Compose.
 
 **AC-9**: If a calculated port would exceed 65535, then the system shall exit with an error message.
 
 **AC-10**: When multiple worktrees are running, the system shall ensure complete network isolation between compose stacks.
 
+**AC-11-env**: When `.env` already contains `COMPOSE_PROJECT_NAME` and `PORT_OFFSET`, subsequent `docker compose` commands shall use these persisted values without re-running the startup script.
+
 ### Knowledge Base Subagents
 
-**AC-11**: When Claude needs information from a knowledge base document, the system shall provide a subagent mechanism to query that document.
+**AC-12**: When Claude needs information from a knowledge base document, the system shall provide a subagent mechanism to query that document.
 
-**AC-12**: While a knowledge subagent is active, it shall have access only to its assigned document content.
+**AC-13**: While a knowledge subagent is active, it shall have access only to its assigned document content.
 
-**AC-13**: When a knowledge subagent responds, it shall provide succinct, accurate answers derived from the document.
+**AC-14**: When a knowledge subagent responds, it shall provide succinct, accurate answers derived from the document.
 
 ## Approach
 
