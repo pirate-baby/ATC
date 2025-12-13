@@ -217,19 +217,7 @@ The kb-expert agent:
 - Adding new knowledge docs requires zero agent changes
 - Uses haiku model for fast, cost-effective responses
 
-**Supplementary Slash Command (Optional):**
-
-For direct user queries, add `.claude/commands/kb.md`:
-```markdown
----
-description: Query a knowledge base document
-argument-hint: <document-name> <question>
----
-
-Read the document `.agent/knowledge_base/$1.md` and answer: $2
-```
-
-Usage: `/kb architecture What database should we use?`
+**Note**: The knowledge base documents are for agent context during work sessions, not human documentation. The kb-expert agent provides a way for the orchestrating Claude to query specific documents without loading everything into primary context.
 
 ## Risks & Mitigations
 
@@ -239,7 +227,7 @@ Usage: `/kb architecture What database should we use?`
 | Knowledge agents become stale | Low | Single generic agent reads docs at runtime; no caching |
 | Docker resource leaks | Medium | Dual-filter cleanup (labels + name patterns) |
 | Port offset exhaustion (6+ worktrees) | Low | Clear error messaging; unlikely use case |
-| Orchestrator doesn't know doc names | Medium | Glob tool in kb-expert; could add `/kb-list` command |
+| Orchestrator doesn't know doc names | Medium | Glob tool in kb-expert allows listing available docs |
 | Large knowledge docs exceed context | Medium | Haiku model has sufficient context; can chunk if needed |
 
 ## Implementation Tasks
@@ -271,7 +259,6 @@ The following tasks should be created to implement this plan:
    - Create single `.claude/agents/kb-expert.md` agent file
    - Configure with Read and Glob tools, haiku model
    - Test with sample knowledge documents
-   - Optionally create `/kb` slash command for direct user queries
 
 6. **Task: Create Dev Convenience Script**
    - Combine startup + docker compose up
