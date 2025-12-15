@@ -19,7 +19,6 @@ async def list_users(
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
     """List all users with pagination."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -32,7 +31,6 @@ async def list_users(
 )
 async def get_current_user():
     """Get current authenticated user."""
-    # TODO: Extract user from JWT token
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -48,5 +46,4 @@ async def get_current_user():
 )
 async def get_user(user_id: UUID):
     """Get user by ID."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")

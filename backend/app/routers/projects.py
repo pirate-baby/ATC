@@ -27,7 +27,6 @@ async def list_projects(
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
     """List all projects with pagination."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -44,7 +43,6 @@ async def list_projects(
 )
 async def create_project(project: ProjectCreate):
     """Create a new project."""
-    # TODO: Implement database insert
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -60,7 +58,6 @@ async def create_project(project: ProjectCreate):
 )
 async def get_project(project_id: UUID):
     """Get project by ID."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -77,7 +74,6 @@ async def get_project(project_id: UUID):
 )
 async def update_project(project_id: UUID, project: ProjectUpdate):
     """Update a project."""
-    # TODO: Implement database update
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -93,7 +89,6 @@ async def update_project(project_id: UUID, project: ProjectUpdate):
 )
 async def delete_project(project_id: UUID):
     """Delete a project."""
-    # TODO: Implement database delete
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -109,7 +104,6 @@ async def delete_project(project_id: UUID):
 )
 async def get_project_settings(project_id: UUID):
     """Get project settings."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -126,5 +120,4 @@ async def get_project_settings(project_id: UUID):
 )
 async def update_project_settings(project_id: UUID, settings: ProjectSettingsUpdate):
     """Update project settings."""
-    # TODO: Implement database update
     raise HTTPException(status_code=501, detail="Not implemented")

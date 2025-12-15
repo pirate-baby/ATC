@@ -55,7 +55,6 @@ class PlanWithDetails(Plan):
     )
 
 
-# Forward references for related summaries
 class TaskSummary(BaseModel):
     """Summary of a task for embedding."""
 
@@ -81,5 +80,4 @@ class ThreadSummary(BaseModel):
     comment_count: int
 
 
-# Rebuild models to resolve forward references
 PlanWithDetails.model_rebuild()

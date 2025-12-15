@@ -50,6 +50,5 @@ class AbortMessage(BaseModel):
     type: Literal["abort"] = "abort"
 
 
-# Union types for message handling
 WSServerMessage = Union[OutputMessage, StatusMessage, ToolUseMessage]
 WSClientMessage = AbortMessage

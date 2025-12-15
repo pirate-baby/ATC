@@ -23,13 +23,9 @@ async def event_generator(project_id: UUID):
 
     Each event includes the full updated entity data.
     """
-    # TODO: Implement event subscription and streaming
     yield "event: connected\ndata: {}\n\n"
 
-    # Keep connection alive
     while True:
-        # TODO: Listen for events from message queue/pub-sub
-        # TODO: Yield events as they occur
         await asyncio.sleep(30)
         yield "event: heartbeat\ndata: {}\n\n"
 
@@ -75,9 +71,6 @@ data: {"id": "...", "target_type": "task", "target_id": "...", ...}
 )
 async def subscribe_to_project_events(project_id: UUID):
     """Subscribe to real-time project events via SSE."""
-    # TODO: Verify project exists
-    # TODO: Verify user has access to project
-
     return StreamingResponse(
         event_generator(project_id),
         media_type="text/event-stream",

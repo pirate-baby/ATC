@@ -35,7 +35,6 @@ async def list_project_plans(
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
     """List plans in a project."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -53,7 +52,6 @@ async def list_project_plans(
 )
 async def create_plan(project_id: UUID, plan: PlanCreate):
     """Create a new plan."""
-    # TODO: Implement database insert
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -69,7 +67,6 @@ async def create_plan(project_id: UUID, plan: PlanCreate):
 )
 async def get_plan(plan_id: UUID):
     """Get plan with full details."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -86,7 +83,6 @@ async def get_plan(plan_id: UUID):
 )
 async def update_plan(plan_id: UUID, plan: PlanUpdate):
     """Update a plan."""
-    # TODO: Implement database update
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -102,7 +98,6 @@ async def update_plan(plan_id: UUID, plan: PlanUpdate):
 )
 async def delete_plan(plan_id: UUID):
     """Delete a plan."""
-    # TODO: Implement database delete
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -118,7 +113,6 @@ async def delete_plan(plan_id: UUID):
 )
 async def list_plan_tasks(plan_id: UUID):
     """List tasks spawned by this plan."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -134,7 +128,6 @@ async def list_plan_tasks(plan_id: UUID):
 )
 async def list_plan_reviews(plan_id: UUID):
     """List reviews for this plan."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -153,7 +146,6 @@ async def list_plan_reviews(plan_id: UUID):
 )
 async def create_plan_review(plan_id: UUID, review: ReviewCreate):
     """Submit a review for this plan."""
-    # TODO: Implement database insert
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -173,5 +165,4 @@ async def create_plan_review(plan_id: UUID, review: ReviewCreate):
 )
 async def approve_plan(plan_id: UUID):
     """Approve plan and trigger task creation."""
-    # TODO: Implement approval workflow
     raise HTTPException(status_code=501, detail="Not implemented")

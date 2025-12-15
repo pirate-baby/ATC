@@ -26,5 +26,4 @@ class SystemStats(BaseModel):
 )
 async def get_system_stats():
     """Get system statistics."""
-    # TODO: Implement database aggregation
     raise HTTPException(status_code=501, detail="Not implemented")

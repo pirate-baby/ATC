@@ -39,62 +39,50 @@ from app.schemas.websocket import (
 )
 
 __all__ = [
-    # Base
     "PaginatedResponse",
     "PaginationParams",
     "StandardError",
     "ValidationError",
-    # Common
     "PlanTaskStatus",
-    # Project
     "Project",
     "ProjectCreate",
     "ProjectUpdate",
     "ProjectSettings",
     "ProjectSettingsUpdate",
-    # Plan
     "Plan",
     "PlanCreate",
     "PlanUpdate",
     "PlanWithDetails",
-    # Task
     "Task",
     "TaskCreate",
     "TaskUpdate",
     "TaskWithDetails",
     "CodeDiff",
     "FileDiff",
-    # User
     "User",
     "UserCreate",
-    # HAT
     "HAT",
     "HATCreate",
     "HATUpdate",
     "HATType",
-    # Triage
     "TriageConnection",
     "TriageConnectionCreate",
     "TriageConnectionUpdate",
     "TriageItem",
     "TriageItemStatus",
     "TriageProvider",
-    # Comment
     "CommentThread",
     "CommentThreadCreate",
     "CommentThreadStatus",
     "Comment",
     "CommentCreate",
     "TargetType",
-    # Session
     "CodingSession",
     "CodingSessionStatus",
     "SessionTargetType",
-    # Review
     "Review",
     "ReviewCreate",
     "ReviewDecision",
-    # WebSocket
     "WSServerMessage",
     "WSClientMessage",
     "OutputMessage",

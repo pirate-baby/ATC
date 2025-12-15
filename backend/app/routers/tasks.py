@@ -37,7 +37,6 @@ async def list_project_tasks(
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
     """List tasks in a project."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -56,7 +55,6 @@ async def list_project_tasks(
 )
 async def create_task(project_id: UUID, task: TaskCreate):
     """Create a new task."""
-    # TODO: Implement database insert with DAG validation
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -72,7 +70,6 @@ async def create_task(project_id: UUID, task: TaskCreate):
 )
 async def get_task(task_id: UUID):
     """Get task with full details."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -89,7 +86,6 @@ async def get_task(task_id: UUID):
 )
 async def update_task(task_id: UUID, task: TaskUpdate):
     """Update a task."""
-    # TODO: Implement database update
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -105,7 +101,6 @@ async def update_task(task_id: UUID, task: TaskUpdate):
 )
 async def delete_task(task_id: UUID):
     """Delete a task."""
-    # TODO: Implement database delete
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -121,7 +116,6 @@ async def delete_task(task_id: UUID):
 )
 async def get_blocking_tasks(task_id: UUID):
     """Get tasks that block this task."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -139,7 +133,6 @@ async def get_blocking_tasks(task_id: UUID):
 )
 async def set_blocking_tasks(task_id: UUID, blocking: BlockingTasksUpdate):
     """Set blocking tasks with DAG validation."""
-    # TODO: Implement DAG validation and update
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -155,7 +148,6 @@ async def set_blocking_tasks(task_id: UUID, blocking: BlockingTasksUpdate):
 )
 async def list_task_reviews(task_id: UUID):
     """List reviews for this task."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -174,7 +166,6 @@ async def list_task_reviews(task_id: UUID):
 )
 async def create_task_review(task_id: UUID, review: ReviewCreate):
     """Submit a review for this task."""
-    # TODO: Implement database insert
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -194,7 +185,6 @@ async def create_task_review(task_id: UUID, review: ReviewCreate):
 )
 async def approve_task(task_id: UUID):
     """Approve task and push to CI/CD."""
-    # TODO: Implement approval workflow
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -211,7 +201,6 @@ async def approve_task(task_id: UUID):
 )
 async def spawn_plan_from_task(task_id: UUID):
     """Spawn a sub-plan from a complex task."""
-    # TODO: Implement plan spawning
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -227,5 +216,4 @@ async def spawn_plan_from_task(task_id: UUID):
 )
 async def get_task_diff(task_id: UUID):
     """Get code diff for task."""
-    # TODO: Implement git diff retrieval
     raise HTTPException(status_code=501, detail="Not implemented")

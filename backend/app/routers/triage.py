@@ -17,7 +17,6 @@ from app.schemas.triage import TriageItemPlan, TriageItemReject
 router = APIRouter()
 
 
-# Connection endpoints
 @router.get(
     "/triage-connections",
     response_model=PaginatedResponse[TriageConnection],
@@ -30,7 +29,6 @@ async def list_connections(
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
     """List triage connections."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -47,7 +45,6 @@ async def list_connections(
 )
 async def create_connection(connection: TriageConnectionCreate):
     """Create a triage connection."""
-    # TODO: Implement database insert
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -63,7 +60,6 @@ async def create_connection(connection: TriageConnectionCreate):
 )
 async def get_connection(connection_id: UUID):
     """Get connection details."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -80,7 +76,6 @@ async def get_connection(connection_id: UUID):
 )
 async def update_connection(connection_id: UUID, connection: TriageConnectionUpdate):
     """Update a triage connection."""
-    # TODO: Implement database update
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -96,7 +91,6 @@ async def update_connection(connection_id: UUID, connection: TriageConnectionUpd
 )
 async def delete_connection(connection_id: UUID):
     """Delete a triage connection."""
-    # TODO: Implement database delete
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -111,7 +105,6 @@ async def delete_connection(connection_id: UUID):
 )
 async def sync_connection(connection_id: UUID):
     """Trigger manual sync."""
-    # TODO: Implement sync trigger
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -132,11 +125,9 @@ async def list_connection_items(
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
     """List triage items from a connection."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
-# Item actions
 @router.post(
     "/triage-items/{item_id}/plan",
     response_model=Plan,
@@ -151,7 +142,6 @@ async def list_connection_items(
 )
 async def plan_from_item(item_id: UUID, plan_request: TriageItemPlan):
     """Create a plan from a triage item."""
-    # TODO: Implement plan creation from triage item
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -167,5 +157,4 @@ async def plan_from_item(item_id: UUID, plan_request: TriageItemPlan):
 )
 async def reject_item(item_id: UUID, reject_request: TriageItemReject | None = None):
     """Reject a triage item."""
-    # TODO: Implement rejection
     raise HTTPException(status_code=501, detail="Not implemented")

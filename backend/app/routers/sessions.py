@@ -25,7 +25,6 @@ async def list_sessions(
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
     """List coding sessions."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -41,7 +40,6 @@ async def list_sessions(
 )
 async def get_session(session_id: UUID):
     """Get session details."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -58,7 +56,6 @@ async def get_session(session_id: UUID):
 )
 async def abort_session(session_id: UUID):
     """Abort an active session."""
-    # TODO: Implement session abort
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -77,24 +74,17 @@ async def session_stream(websocket: WebSocket, session_id: UUID):
     Client-to-Server messages:
     - abort: {"type": "abort"}
     """
-    # Validate token from query params
     token = websocket.query_params.get("token")
     if not token:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    # TODO: Validate JWT token
-    # TODO: Verify session exists and is running
-
     await websocket.accept()
 
     try:
         while True:
-            # TODO: Stream session output
-            # TODO: Handle abort messages
             data = await websocket.receive_json()
             if data.get("type") == "abort":
-                # TODO: Trigger session abort
                 await websocket.send_json(
                     {"type": "status", "status": "aborted", "timestamp": "..."}
                 )

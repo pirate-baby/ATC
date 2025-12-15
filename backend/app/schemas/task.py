@@ -104,7 +104,6 @@ class TaskWithDetails(Task):
     )
 
 
-# Forward references for related summaries
 class PlanSummary(BaseModel):
     """Summary of a plan for embedding."""
 
@@ -146,5 +145,4 @@ class SessionSummary(BaseModel):
     started_at: datetime
 
 
-# Rebuild models to resolve forward references
 TaskWithDetails.model_rebuild()

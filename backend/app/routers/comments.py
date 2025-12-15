@@ -15,7 +15,6 @@ from app.schemas.comment import CommentThreadWithComments
 router = APIRouter()
 
 
-# Plan thread endpoints
 @router.get(
     "/plans/{plan_id}/threads",
     response_model=list[CommentThread],
@@ -28,7 +27,6 @@ router = APIRouter()
 )
 async def list_plan_threads(plan_id: UUID):
     """List comment threads on a plan."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -46,11 +44,9 @@ async def list_plan_threads(plan_id: UUID):
 )
 async def create_plan_thread(plan_id: UUID, thread: CommentThreadCreate):
     """Create a comment thread on a plan."""
-    # TODO: Implement database insert
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
-# Task thread endpoints
 @router.get(
     "/tasks/{task_id}/threads",
     response_model=list[CommentThread],
@@ -68,7 +64,6 @@ async def list_task_threads(
     ),
 ):
     """List comment threads on a task."""
-    # TODO: Implement database query with type filter
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -86,11 +81,9 @@ async def list_task_threads(
 )
 async def create_task_thread(task_id: UUID, thread: CommentThreadCreate):
     """Create a comment thread on a task or code line."""
-    # TODO: Implement database insert
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
-# Thread operations
 @router.get(
     "/threads/{thread_id}",
     response_model=CommentThreadWithComments,
@@ -103,7 +96,6 @@ async def create_task_thread(task_id: UUID, thread: CommentThreadCreate):
 )
 async def get_thread(thread_id: UUID):
     """Get thread with all comments."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -119,7 +111,6 @@ async def get_thread(thread_id: UUID):
 )
 async def resolve_thread(thread_id: UUID):
     """Resolve a thread and trigger AI summarization."""
-    # TODO: Implement thread resolution with AI summarization
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -135,7 +126,6 @@ async def resolve_thread(thread_id: UUID):
 )
 async def list_thread_comments(thread_id: UUID):
     """List comments in thread."""
-    # TODO: Implement database query
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -153,5 +143,4 @@ async def list_thread_comments(thread_id: UUID):
 )
 async def create_comment(thread_id: UUID, comment: CommentCreate):
     """Add comment to thread."""
-    # TODO: Implement database insert
     raise HTTPException(status_code=501, detail="Not implemented")
