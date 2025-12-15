@@ -8,7 +8,7 @@ from app.schemas.comment import (
     TargetType,
 )
 from app.schemas.common import PlanTaskStatus
-from app.schemas.hat import HAT, HATCreate, HATType, HATUpdate
+from app.schemas.hat import HAT, HATCreate, HATUpdate
 from app.schemas.plan import Plan, PlanCreate, PlanUpdate, PlanWithDetails
 from app.schemas.project import (
     Project,
@@ -64,7 +64,6 @@ __all__ = [
     "HAT",
     "HATCreate",
     "HATUpdate",
-    "HATType",
     "TriageConnection",
     "TriageConnectionCreate",
     "TriageConnectionUpdate",
