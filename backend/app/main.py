@@ -1,12 +1,26 @@
-"""ATC Backend - FastAPI Application"""
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.routers import (
+    comments_router,
+    events_router,
+    hats_router,
+    plans_router,
+    projects_router,
+    sessions_router,
+    system_router,
+    tasks_router,
+    triage_router,
+    users_router,
+)
 
 app = FastAPI(
     title="ATC API",
     description="Automated Team Collaboration API",
-    version="0.1.0",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 app.add_middleware(
@@ -17,14 +31,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+ROUTERS = [
+    (projects_router, "Projects"),
+    (plans_router, "Plans"),
+    (tasks_router, "Tasks"),
+    (sessions_router, "Coding Sessions"),
+    (comments_router, "Comments"),
+    (users_router, "Users"),
+    (hats_router, "HATs"),
+    (triage_router, "Triage"),
+    (system_router, "System"),
+    (events_router, "Events"),
+]
 
-@app.get("/health")
+for router, tag in ROUTERS:
+    app.include_router(router, prefix="/api/v1", tags=[tag])
+
+
+@app.get("/health", tags=["Health"], include_in_schema=True)
 async def health_check():
-    """Health check endpoint for Docker healthcheck."""
-    return {"status": "healthy"}
+    """
+    Health check endpoint for Docker healthcheck.
+
+    This endpoint does not require authentication.
+    """
+    return {"status": "healthy", "version": app.version}
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
-    """Root endpoint."""
-    return {"message": "Welcome to ATC API"}
+    """Root endpoint redirecting to docs."""
+    return {"message": "Welcome to ATC API", "docs": "/docs", "redoc": "/redoc"}
