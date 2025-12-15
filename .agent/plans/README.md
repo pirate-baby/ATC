@@ -56,4 +56,4 @@ This ensures acceptance criteria are unambiguous and directly testable.
 
 | # | Plan | Status | Description |
 |---|------|--------|-------------|
-| - | - | - | No plans yet |
+| 0001 | [Basic Repo Structure](0001-basic-repo-structure.md) | Draft | Docker services, worktree namespacing, knowledge base subagents |
