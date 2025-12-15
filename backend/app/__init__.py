@@ -1,1 +1,1 @@
-# ATC Backend Application
+"""ATC Backend Application."""
