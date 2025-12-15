@@ -24,7 +24,6 @@ async def list_sessions(
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
-    """List coding sessions."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -39,7 +38,6 @@ async def list_sessions(
     },
 )
 async def get_session(session_id: UUID):
-    """Get session details."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -55,7 +53,6 @@ async def get_session(session_id: UUID):
     },
 )
 async def abort_session(session_id: UUID):
-    """Abort an active session."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 

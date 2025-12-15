@@ -34,7 +34,6 @@ async def list_project_plans(
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
-    """List plans in a project."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -51,7 +50,6 @@ async def list_project_plans(
     },
 )
 async def create_plan(project_id: UUID, plan: PlanCreate):
-    """Create a new plan."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -66,7 +64,6 @@ async def create_plan(project_id: UUID, plan: PlanCreate):
     },
 )
 async def get_plan(plan_id: UUID):
-    """Get plan with full details."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -82,7 +79,6 @@ async def get_plan(plan_id: UUID):
     },
 )
 async def update_plan(plan_id: UUID, plan: PlanUpdate):
-    """Update a plan."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -97,7 +93,6 @@ async def update_plan(plan_id: UUID, plan: PlanUpdate):
     },
 )
 async def delete_plan(plan_id: UUID):
-    """Delete a plan."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -112,7 +107,6 @@ async def delete_plan(plan_id: UUID):
     },
 )
 async def list_plan_tasks(plan_id: UUID):
-    """List tasks spawned by this plan."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -127,7 +121,6 @@ async def list_plan_tasks(plan_id: UUID):
     },
 )
 async def list_plan_reviews(plan_id: UUID):
-    """List reviews for this plan."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -145,7 +138,6 @@ async def list_plan_reviews(plan_id: UUID):
     },
 )
 async def create_plan_review(plan_id: UUID, review: ReviewCreate):
-    """Submit a review for this plan."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -164,5 +156,4 @@ async def create_plan_review(plan_id: UUID, review: ReviewCreate):
     },
 )
 async def approve_plan(plan_id: UUID):
-    """Approve plan and trigger task creation."""
     raise HTTPException(status_code=501, detail="Not implemented")

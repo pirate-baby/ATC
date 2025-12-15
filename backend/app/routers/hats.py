@@ -19,7 +19,6 @@ async def list_hats(
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
-    """List all HATs with pagination."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -35,7 +34,6 @@ async def list_hats(
     },
 )
 async def create_hat(hat: HATCreate):
-    """Create a new HAT."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -50,7 +48,6 @@ async def create_hat(hat: HATCreate):
     },
 )
 async def get_hat(hat_id: UUID):
-    """Get HAT by ID."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -66,7 +63,6 @@ async def get_hat(hat_id: UUID):
     },
 )
 async def update_hat(hat_id: UUID, hat: HATUpdate):
-    """Update a HAT."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -81,5 +77,4 @@ async def update_hat(hat_id: UUID, hat: HATUpdate):
     },
 )
 async def delete_hat(hat_id: UUID):
-    """Delete a HAT."""
     raise HTTPException(status_code=501, detail="Not implemented")

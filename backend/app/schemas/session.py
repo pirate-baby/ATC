@@ -6,23 +6,17 @@ from pydantic import BaseModel, Field
 
 
 class SessionTargetType(str, Enum):
-    """Type of entity the session is working on."""
-
     PLAN = "plan"
     TASK = "task"
 
 
 class CodingSessionStatus(str, Enum):
-    """Status of a coding session."""
-
     RUNNING = "running"
     COMPLETED = "completed"
     ABORTED = "aborted"
 
 
 class CodingSession(BaseModel):
-    """Coding session response schema."""
-
     id: UUID = Field(description="Session unique identifier")
     target_type: SessionTargetType = Field(description="Type of target entity")
     target_id: UUID = Field(description="ID of target entity (plan or task)")

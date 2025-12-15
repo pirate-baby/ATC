@@ -50,15 +50,9 @@ for router, tag in ROUTERS:
 
 @app.get("/health", tags=["Health"], include_in_schema=True)
 async def health_check():
-    """
-    Health check endpoint for Docker healthcheck.
-
-    This endpoint does not require authentication.
-    """
     return {"status": "healthy", "version": app.version}
 
 
 @app.get("/", include_in_schema=False)
 async def root():
-    """Root endpoint redirecting to docs."""
     return {"message": "Welcome to ATC API", "docs": "/docs", "redoc": "/redoc"}

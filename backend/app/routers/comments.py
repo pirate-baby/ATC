@@ -26,7 +26,6 @@ router = APIRouter()
     },
 )
 async def list_plan_threads(plan_id: UUID):
-    """List comment threads on a plan."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -43,7 +42,6 @@ async def list_plan_threads(plan_id: UUID):
     },
 )
 async def create_plan_thread(plan_id: UUID, thread: CommentThreadCreate):
-    """Create a comment thread on a plan."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -63,7 +61,6 @@ async def list_task_threads(
         default=None, description="Filter by target type (task or code_line)"
     ),
 ):
-    """List comment threads on a task."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -80,7 +77,6 @@ async def list_task_threads(
     },
 )
 async def create_task_thread(task_id: UUID, thread: CommentThreadCreate):
-    """Create a comment thread on a task or code line."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -95,7 +91,6 @@ async def create_task_thread(task_id: UUID, thread: CommentThreadCreate):
     },
 )
 async def get_thread(thread_id: UUID):
-    """Get thread with all comments."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -110,7 +105,6 @@ async def get_thread(thread_id: UUID):
     },
 )
 async def resolve_thread(thread_id: UUID):
-    """Resolve a thread and trigger AI summarization."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -125,7 +119,6 @@ async def resolve_thread(thread_id: UUID):
     },
 )
 async def list_thread_comments(thread_id: UUID):
-    """List comments in thread."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -142,5 +135,4 @@ async def list_thread_comments(thread_id: UUID):
     },
 )
 async def create_comment(thread_id: UUID, comment: CommentCreate):
-    """Add comment to thread."""
     raise HTTPException(status_code=501, detail="Not implemented")

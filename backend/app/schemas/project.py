@@ -5,8 +5,6 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 class ProjectSettings(BaseModel):
-    """Configuration for a project's workflow behavior."""
-
     required_approvals_plan: int = Field(
         default=1, ge=1, description="Number of approvals required for Plans"
     )
@@ -22,8 +20,6 @@ class ProjectSettings(BaseModel):
 
 
 class ProjectSettingsUpdate(BaseModel):
-    """Schema for updating project settings."""
-
     required_approvals_plan: int | None = Field(
         default=None, ge=1, description="Number of approvals required for Plans"
     )
@@ -39,16 +35,12 @@ class ProjectSettingsUpdate(BaseModel):
 
 
 class ProjectBase(BaseModel):
-    """Base project fields."""
-
     name: str = Field(description="Human-readable project name")
     git_url: HttpUrl = Field(description="Git repository URL")
     main_branch: str = Field(default="main", description="Primary branch name")
 
 
 class ProjectCreate(ProjectBase):
-    """Schema for creating a project."""
-
     settings: ProjectSettings | None = Field(
         default=None, description="Project settings (optional, defaults applied if not provided)"
     )
@@ -58,8 +50,6 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectUpdate(BaseModel):
-    """Schema for updating a project."""
-
     name: str | None = Field(default=None, description="Human-readable project name")
     git_url: HttpUrl | None = Field(default=None, description="Git repository URL")
     main_branch: str | None = Field(default=None, description="Primary branch name")
@@ -69,8 +59,6 @@ class ProjectUpdate(BaseModel):
 
 
 class Project(ProjectBase):
-    """Full project response schema."""
-
     id: UUID = Field(description="Project unique identifier")
     settings: ProjectSettings = Field(description="Project settings")
     triage_connection_id: UUID | None = Field(

@@ -7,8 +7,6 @@ router = APIRouter()
 
 
 class SystemStats(BaseModel):
-    """System statistics."""
-
     active_sessions: int = Field(description="Number of currently running coding sessions")
     pending_reviews: int = Field(description="Number of items awaiting review")
     tasks_in_progress: int = Field(description="Number of tasks currently being worked on")
@@ -25,5 +23,4 @@ class SystemStats(BaseModel):
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
 async def get_system_stats():
-    """Get system statistics."""
     raise HTTPException(status_code=501, detail="Not implemented")

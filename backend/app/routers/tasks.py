@@ -36,7 +36,6 @@ async def list_project_tasks(
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
-    """List tasks in a project."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -54,7 +53,6 @@ async def list_project_tasks(
     },
 )
 async def create_task(project_id: UUID, task: TaskCreate):
-    """Create a new task."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -69,7 +67,6 @@ async def create_task(project_id: UUID, task: TaskCreate):
     },
 )
 async def get_task(task_id: UUID):
-    """Get task with full details."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -85,7 +82,6 @@ async def get_task(task_id: UUID):
     },
 )
 async def update_task(task_id: UUID, task: TaskUpdate):
-    """Update a task."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -100,7 +96,6 @@ async def update_task(task_id: UUID, task: TaskUpdate):
     },
 )
 async def delete_task(task_id: UUID):
-    """Delete a task."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -115,7 +110,6 @@ async def delete_task(task_id: UUID):
     },
 )
 async def get_blocking_tasks(task_id: UUID):
-    """Get tasks that block this task."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -132,7 +126,6 @@ async def get_blocking_tasks(task_id: UUID):
     },
 )
 async def set_blocking_tasks(task_id: UUID, blocking: BlockingTasksUpdate):
-    """Set blocking tasks with DAG validation."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -147,7 +140,6 @@ async def set_blocking_tasks(task_id: UUID, blocking: BlockingTasksUpdate):
     },
 )
 async def list_task_reviews(task_id: UUID):
-    """List reviews for this task."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -165,7 +157,6 @@ async def list_task_reviews(task_id: UUID):
     },
 )
 async def create_task_review(task_id: UUID, review: ReviewCreate):
-    """Submit a review for this task."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -184,7 +175,6 @@ async def create_task_review(task_id: UUID, review: ReviewCreate):
     },
 )
 async def approve_task(task_id: UUID):
-    """Approve task and push to CI/CD."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -200,7 +190,6 @@ async def approve_task(task_id: UUID):
     },
 )
 async def spawn_plan_from_task(task_id: UUID):
-    """Spawn a sub-plan from a complex task."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -215,5 +204,4 @@ async def spawn_plan_from_task(task_id: UUID):
     },
 )
 async def get_task_diff(task_id: UUID):
-    """Get code diff for task."""
     raise HTTPException(status_code=501, detail="Not implemented")

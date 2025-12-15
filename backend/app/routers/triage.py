@@ -28,7 +28,6 @@ async def list_connections(
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
-    """List triage connections."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -44,7 +43,6 @@ async def list_connections(
     },
 )
 async def create_connection(connection: TriageConnectionCreate):
-    """Create a triage connection."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -59,7 +57,6 @@ async def create_connection(connection: TriageConnectionCreate):
     },
 )
 async def get_connection(connection_id: UUID):
-    """Get connection details."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -75,7 +72,6 @@ async def get_connection(connection_id: UUID):
     },
 )
 async def update_connection(connection_id: UUID, connection: TriageConnectionUpdate):
-    """Update a triage connection."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -90,7 +86,6 @@ async def update_connection(connection_id: UUID, connection: TriageConnectionUpd
     },
 )
 async def delete_connection(connection_id: UUID):
-    """Delete a triage connection."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -104,7 +99,6 @@ async def delete_connection(connection_id: UUID):
     },
 )
 async def sync_connection(connection_id: UUID):
-    """Trigger manual sync."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -124,7 +118,6 @@ async def list_connection_items(
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
-    """List triage items from a connection."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -141,7 +134,6 @@ async def list_connection_items(
     },
 )
 async def plan_from_item(item_id: UUID, plan_request: TriageItemPlan):
-    """Create a plan from a triage item."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -156,5 +148,4 @@ async def plan_from_item(item_id: UUID, plan_request: TriageItemPlan):
     },
 )
 async def reject_item(item_id: UUID, reject_request: TriageItemReject | None = None):
-    """Reject a triage item."""
     raise HTTPException(status_code=501, detail="Not implemented")

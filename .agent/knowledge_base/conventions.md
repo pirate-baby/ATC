@@ -29,11 +29,21 @@
 @app.put("/users/{id}")     # Update user
 @app.delete("/users/{id}")  # Delete user
 
-# Always include docstrings for endpoints
+# Use descriptive function names and typed parameters instead of docstrings
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Docker healthcheck."""
     return {"status": "healthy"}
+
+# Only use docstrings for non-obvious protocol documentation (WebSocket/SSE)
+@app.websocket("/ws/sessions/{session_id}/stream")
+async def session_stream(websocket: WebSocket, session_id: UUID):
+    """
+    Authentication: Pass JWT token as query parameter ?token={jwt}
+
+    Server-to-Client messages:
+    - output: {"type": "output", "content": "...", "timestamp": "..."}
+    - status: {"type": "status", "status": "running|completed|aborted"}
+    """
 ```
 
 ### Imports

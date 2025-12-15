@@ -8,8 +8,6 @@ from app.schemas.common import PlanTaskStatus
 
 
 class FileStatus(str, Enum):
-    """Status of a file in a diff."""
-
     ADDED = "added"
     MODIFIED = "modified"
     DELETED = "deleted"
@@ -17,8 +15,6 @@ class FileStatus(str, Enum):
 
 
 class FileDiff(BaseModel):
-    """Diff information for a single file."""
-
     path: str = Field(description="File path")
     status: FileStatus = Field(description="File status (added/modified/deleted/renamed)")
     additions: int = Field(description="Number of lines added")
@@ -27,23 +23,17 @@ class FileDiff(BaseModel):
 
 
 class CodeDiff(BaseModel):
-    """Git diff of changes made by a task."""
-
     base_branch: str = Field(description="Base branch name")
     head_branch: str = Field(description="Head branch name (task branch)")
     files: list[FileDiff] = Field(description="List of file diffs")
 
 
 class TaskBase(BaseModel):
-    """Base task fields."""
-
     title: str = Field(description="Task title")
     description: str | None = Field(default=None, description="What needs to be done and why")
 
 
 class TaskCreate(TaskBase):
-    """Schema for creating a task."""
-
     plan_id: UUID | None = Field(default=None, description="Parent plan that spawned this task")
     blocked_by: list[UUID] = Field(
         default_factory=list, description="Task IDs that must complete first (DAG)"
@@ -51,23 +41,17 @@ class TaskCreate(TaskBase):
 
 
 class TaskUpdate(BaseModel):
-    """Schema for updating a task."""
-
     title: str | None = Field(default=None, description="Task title")
     description: str | None = Field(default=None, description="What needs to be done and why")
 
 
 class BlockingTasksUpdate(BaseModel):
-    """Schema for updating blocking task relationships."""
-
     blocked_by: list[UUID] = Field(
         description="Task IDs that must complete before this task can start"
     )
 
 
 class Task(TaskBase):
-    """Full task response schema."""
-
     id: UUID = Field(description="Task unique identifier")
     project_id: UUID = Field(description="Parent project ID")
     plan_id: UUID | None = Field(default=None, description="Parent plan that spawned this task")
@@ -89,8 +73,6 @@ class Task(TaskBase):
 
 
 class TaskWithDetails(Task):
-    """Task with related entities."""
-
     plan: "PlanSummary | None" = Field(default=None, description="Parent plan summary")
     blocking_tasks: list["TaskSummary"] = Field(
         default_factory=list, description="Tasks that block this task"
@@ -105,24 +87,18 @@ class TaskWithDetails(Task):
 
 
 class PlanSummary(BaseModel):
-    """Summary of a plan for embedding."""
-
     id: UUID
     title: str
     status: PlanTaskStatus
 
 
 class TaskSummary(BaseModel):
-    """Summary of a task for embedding."""
-
     id: UUID
     title: str
     status: PlanTaskStatus
 
 
 class ReviewSummary(BaseModel):
-    """Summary of a review for embedding."""
-
     id: UUID
     reviewer_id: UUID
     decision: str
@@ -130,16 +106,12 @@ class ReviewSummary(BaseModel):
 
 
 class ThreadSummary(BaseModel):
-    """Summary of a comment thread for embedding."""
-
     id: UUID
     status: str
     comment_count: int
 
 
 class SessionSummary(BaseModel):
-    """Summary of a coding session for embedding."""
-
     id: UUID
     status: str
     started_at: datetime

@@ -18,7 +18,6 @@ async def list_users(
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
-    """List all users with pagination."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -30,7 +29,6 @@ async def list_users(
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
 async def get_current_user():
-    """Get current authenticated user."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -45,5 +43,4 @@ async def get_current_user():
     },
 )
 async def get_user(user_id: UUID):
-    """Get user by ID."""
     raise HTTPException(status_code=501, detail="Not implemented")

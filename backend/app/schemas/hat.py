@@ -6,16 +6,12 @@ from pydantic import BaseModel, Field
 
 
 class HATType(str, Enum):
-    """Type of HAT implementation."""
-
     SLASH_COMMAND = "slash_command"
     SKILL = "skill"
     SUBAGENT = "subagent"
 
 
 class HATBase(BaseModel):
-    """Base HAT fields."""
-
     name: str = Field(description="HAT name")
     type: HATType = Field(description="HAT type (slash_command, skill, subagent)")
     description: str | None = Field(default=None, description="HAT description")
@@ -26,14 +22,10 @@ class HATBase(BaseModel):
 
 
 class HATCreate(HATBase):
-    """Schema for creating a HAT."""
-
     pass
 
 
 class HATUpdate(BaseModel):
-    """Schema for updating a HAT."""
-
     name: str | None = Field(default=None, description="HAT name")
     type: HATType | None = Field(default=None, description="HAT type")
     description: str | None = Field(default=None, description="HAT description")
@@ -42,8 +34,6 @@ class HATUpdate(BaseModel):
 
 
 class HAT(HATBase):
-    """Full HAT response schema."""
-
     id: UUID = Field(description="HAT unique identifier")
     created_at: datetime = Field(description="Creation timestamp")
 
