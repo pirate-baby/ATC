@@ -57,3 +57,4 @@ This ensures acceptance criteria are unambiguous and directly testable.
 | # | Plan | Status | Description |
 |---|------|--------|-------------|
 | 0001 | [Basic Repo Structure](0001-basic-repo-structure.md) | Draft | Docker services, worktree namespacing, knowledge base subagents |
+| 0002 | [Swagger API Definition](0002-swagger-api-definition.md) | Draft | Complete OpenAPI spec for frontend/backend contract |
