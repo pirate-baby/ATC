@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.auth import RequireAuth
 from app.schemas import StandardError
 
 router = APIRouter()
@@ -22,5 +23,5 @@ class SystemStats(BaseModel):
     description="Retrieve system-wide statistics including active sessions and pending reviews.",
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
-async def get_system_stats():
+async def get_system_stats(current_user: RequireAuth):
     raise HTTPException(status_code=501, detail="Not implemented")

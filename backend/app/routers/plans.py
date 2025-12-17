@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from app.auth import RequireAuth
 from app.schemas import (
     PaginatedResponse,
     Plan,
@@ -30,6 +31,7 @@ router = APIRouter()
 )
 async def list_project_plans(
     project_id: UUID,
+    current_user: RequireAuth,
     status: PlanTaskStatus | None = Query(default=None, description="Filter by status"),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
@@ -49,7 +51,7 @@ async def list_project_plans(
         404: {"model": StandardError, "description": "Project not found"},
     },
 )
-async def create_plan(project_id: UUID, plan: PlanCreate):
+async def create_plan(project_id: UUID, current_user: RequireAuth, plan: PlanCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -63,7 +65,7 @@ async def create_plan(project_id: UUID, plan: PlanCreate):
         404: {"model": StandardError, "description": "Plan not found"},
     },
 )
-async def get_plan(plan_id: UUID):
+async def get_plan(plan_id: UUID, current_user: RequireAuth):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -78,7 +80,7 @@ async def get_plan(plan_id: UUID):
         404: {"model": StandardError, "description": "Plan not found"},
     },
 )
-async def update_plan(plan_id: UUID, plan: PlanUpdate):
+async def update_plan(plan_id: UUID, current_user: RequireAuth, plan: PlanUpdate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -92,7 +94,7 @@ async def update_plan(plan_id: UUID, plan: PlanUpdate):
         404: {"model": StandardError, "description": "Plan not found"},
     },
 )
-async def delete_plan(plan_id: UUID):
+async def delete_plan(plan_id: UUID, current_user: RequireAuth):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -106,7 +108,7 @@ async def delete_plan(plan_id: UUID):
         404: {"model": StandardError, "description": "Plan not found"},
     },
 )
-async def list_plan_tasks(plan_id: UUID):
+async def list_plan_tasks(plan_id: UUID, current_user: RequireAuth):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -120,7 +122,7 @@ async def list_plan_tasks(plan_id: UUID):
         404: {"model": StandardError, "description": "Plan not found"},
     },
 )
-async def list_plan_reviews(plan_id: UUID):
+async def list_plan_reviews(plan_id: UUID, current_user: RequireAuth):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -137,7 +139,7 @@ async def list_plan_reviews(plan_id: UUID):
         409: {"model": StandardError, "description": "Plan not in review state"},
     },
 )
-async def create_plan_review(plan_id: UUID, review: ReviewCreate):
+async def create_plan_review(plan_id: UUID, current_user: RequireAuth, review: ReviewCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -155,5 +157,5 @@ async def create_plan_review(plan_id: UUID, review: ReviewCreate):
         },
     },
 )
-async def approve_plan(plan_id: UUID):
+async def approve_plan(plan_id: UUID, current_user: RequireAuth):
     raise HTTPException(status_code=501, detail="Not implemented")

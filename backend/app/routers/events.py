@@ -4,6 +4,8 @@ from uuid import UUID
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from app.auth import RequireAuth
+
 router = APIRouter()
 
 
@@ -54,7 +56,7 @@ data: {"id": "...", "target_type": "task", "target_id": "...", ...}
         404: {"description": "Project not found"},
     },
 )
-async def subscribe_to_project_events(project_id: UUID):
+async def subscribe_to_project_events(project_id: UUID, current_user: RequireAuth):
     return StreamingResponse(
         event_generator(project_id),
         media_type="text/event-stream",
