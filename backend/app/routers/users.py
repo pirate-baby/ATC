@@ -1,8 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.auth import RequireAuth
+from app.auth import get_current_user
 from app.schemas import PaginatedResponse, StandardError, User
 
 router = APIRouter()
@@ -16,7 +16,6 @@ router = APIRouter()
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
 async def list_users(
-    current_user: RequireAuth,
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
@@ -30,7 +29,10 @@ async def list_users(
     description="Retrieve the currently authenticated user's profile.",
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
-async def get_current_user_endpoint(current_user: RequireAuth):
+async def get_current_user_endpoint(request: Request):
+    # Access current user from request.state (set by AuthMiddleware)
+    _current_user = get_current_user(request)
+    # TODO: Return actual user data when endpoint is implemented
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -44,5 +46,5 @@ async def get_current_user_endpoint(current_user: RequireAuth):
         404: {"model": StandardError, "description": "User not found"},
     },
 )
-async def get_user(user_id: UUID, current_user: RequireAuth):
+async def get_user(user_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")

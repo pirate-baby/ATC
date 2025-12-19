@@ -2,7 +2,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.auth import RequireAuth
 from app.schemas import (
     CodeDiff,
     PaginatedResponse,
@@ -33,7 +32,6 @@ router = APIRouter()
 )
 async def list_project_tasks(
     project_id: UUID,
-    current_user: RequireAuth,
     status: PlanTaskStatus | None = Query(default=None, description="Filter by status"),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
@@ -54,7 +52,7 @@ async def list_project_tasks(
         409: {"model": StandardError, "description": "Circular dependency detected"},
     },
 )
-async def create_task(project_id: UUID, current_user: RequireAuth, task: TaskCreate):
+async def create_task(project_id: UUID, task: TaskCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -68,7 +66,7 @@ async def create_task(project_id: UUID, current_user: RequireAuth, task: TaskCre
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def get_task(task_id: UUID, current_user: RequireAuth):
+async def get_task(task_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -83,7 +81,7 @@ async def get_task(task_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def update_task(task_id: UUID, current_user: RequireAuth, task: TaskUpdate):
+async def update_task(task_id: UUID, task: TaskUpdate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -97,7 +95,7 @@ async def update_task(task_id: UUID, current_user: RequireAuth, task: TaskUpdate
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def delete_task(task_id: UUID, current_user: RequireAuth):
+async def delete_task(task_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -111,7 +109,7 @@ async def delete_task(task_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def get_blocking_tasks(task_id: UUID, current_user: RequireAuth):
+async def get_blocking_tasks(task_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -127,9 +125,7 @@ async def get_blocking_tasks(task_id: UUID, current_user: RequireAuth):
         409: {"model": StandardError, "description": "Circular dependency would be created"},
     },
 )
-async def set_blocking_tasks(
-    task_id: UUID, current_user: RequireAuth, blocking: BlockingTasksUpdate
-):
+async def set_blocking_tasks(task_id: UUID, blocking: BlockingTasksUpdate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -143,7 +139,7 @@ async def set_blocking_tasks(
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def list_task_reviews(task_id: UUID, current_user: RequireAuth):
+async def list_task_reviews(task_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -160,7 +156,7 @@ async def list_task_reviews(task_id: UUID, current_user: RequireAuth):
         409: {"model": StandardError, "description": "Task not in review state"},
     },
 )
-async def create_task_review(task_id: UUID, current_user: RequireAuth, review: ReviewCreate):
+async def create_task_review(task_id: UUID, review: ReviewCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -178,7 +174,7 @@ async def create_task_review(task_id: UUID, current_user: RequireAuth, review: R
         },
     },
 )
-async def approve_task(task_id: UUID, current_user: RequireAuth):
+async def approve_task(task_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -193,7 +189,7 @@ async def approve_task(task_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def spawn_plan_from_task(task_id: UUID, current_user: RequireAuth):
+async def spawn_plan_from_task(task_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -207,5 +203,5 @@ async def spawn_plan_from_task(task_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Task not found or no branch exists"},
     },
 )
-async def get_task_diff(task_id: UUID, current_user: RequireAuth):
+async def get_task_diff(task_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")

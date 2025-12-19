@@ -2,7 +2,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.auth import RequireAuth
 from app.schemas import (
     PaginatedResponse,
     Project,
@@ -24,7 +23,6 @@ router = APIRouter()
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
 async def list_projects(
-    current_user: RequireAuth,
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
@@ -42,7 +40,7 @@ async def list_projects(
         401: {"model": StandardError, "description": "Unauthorized"},
     },
 )
-async def create_project(current_user: RequireAuth, project: ProjectCreate):
+async def create_project(project: ProjectCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -56,7 +54,7 @@ async def create_project(current_user: RequireAuth, project: ProjectCreate):
         404: {"model": StandardError, "description": "Project not found"},
     },
 )
-async def get_project(project_id: UUID, current_user: RequireAuth):
+async def get_project(project_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -71,7 +69,7 @@ async def get_project(project_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Project not found"},
     },
 )
-async def update_project(project_id: UUID, current_user: RequireAuth, project: ProjectUpdate):
+async def update_project(project_id: UUID, project: ProjectUpdate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -85,7 +83,7 @@ async def update_project(project_id: UUID, current_user: RequireAuth, project: P
         404: {"model": StandardError, "description": "Project not found"},
     },
 )
-async def delete_project(project_id: UUID, current_user: RequireAuth):
+async def delete_project(project_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -99,7 +97,7 @@ async def delete_project(project_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Project not found"},
     },
 )
-async def get_project_settings(project_id: UUID, current_user: RequireAuth):
+async def get_project_settings(project_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -114,7 +112,5 @@ async def get_project_settings(project_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Project not found"},
     },
 )
-async def update_project_settings(
-    project_id: UUID, current_user: RequireAuth, settings: ProjectSettingsUpdate
-):
+async def update_project_settings(project_id: UUID, settings: ProjectSettingsUpdate):
     raise HTTPException(status_code=501, detail="Not implemented")

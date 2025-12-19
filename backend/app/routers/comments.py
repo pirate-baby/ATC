@@ -2,7 +2,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.auth import RequireAuth
 from app.schemas import (
     Comment,
     CommentCreate,
@@ -26,7 +25,7 @@ router = APIRouter()
         404: {"model": StandardError, "description": "Plan not found"},
     },
 )
-async def list_plan_threads(plan_id: UUID, current_user: RequireAuth):
+async def list_plan_threads(plan_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -42,7 +41,7 @@ async def list_plan_threads(plan_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Plan not found"},
     },
 )
-async def create_plan_thread(plan_id: UUID, current_user: RequireAuth, thread: CommentThreadCreate):
+async def create_plan_thread(plan_id: UUID, thread: CommentThreadCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -58,7 +57,6 @@ async def create_plan_thread(plan_id: UUID, current_user: RequireAuth, thread: C
 )
 async def list_task_threads(
     task_id: UUID,
-    current_user: RequireAuth,
     target_type: TargetType | None = Query(
         default=None, description="Filter by target type (task or code_line)"
     ),
@@ -78,7 +76,7 @@ async def list_task_threads(
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def create_task_thread(task_id: UUID, current_user: RequireAuth, thread: CommentThreadCreate):
+async def create_task_thread(task_id: UUID, thread: CommentThreadCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -92,7 +90,7 @@ async def create_task_thread(task_id: UUID, current_user: RequireAuth, thread: C
         404: {"model": StandardError, "description": "Thread not found"},
     },
 )
-async def get_thread(thread_id: UUID, current_user: RequireAuth):
+async def get_thread(thread_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -106,7 +104,7 @@ async def get_thread(thread_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Thread not found"},
     },
 )
-async def resolve_thread(thread_id: UUID, current_user: RequireAuth):
+async def resolve_thread(thread_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -120,7 +118,7 @@ async def resolve_thread(thread_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Thread not found"},
     },
 )
-async def list_thread_comments(thread_id: UUID, current_user: RequireAuth):
+async def list_thread_comments(thread_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -136,5 +134,5 @@ async def list_thread_comments(thread_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Thread not found"},
     },
 )
-async def create_comment(thread_id: UUID, current_user: RequireAuth, comment: CommentCreate):
+async def create_comment(thread_id: UUID, comment: CommentCreate):
     raise HTTPException(status_code=501, detail="Not implemented")

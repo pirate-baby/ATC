@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
-from app.auth import RequireAuth, WebSocketAuthError, validate_websocket_token
+from app.auth import WebSocketAuthError, validate_websocket_token
 from app.schemas import (
     CodingSession,
     CodingSessionStatus,
@@ -21,7 +21,6 @@ router = APIRouter()
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
 async def list_sessions(
-    current_user: RequireAuth,
     status_filter: CodingSessionStatus | None = Query(
         default=None, alias="status", description="Filter by status"
     ),
@@ -41,7 +40,7 @@ async def list_sessions(
         404: {"model": StandardError, "description": "Session not found"},
     },
 )
-async def get_session(session_id: UUID, current_user: RequireAuth):
+async def get_session(session_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -56,7 +55,7 @@ async def get_session(session_id: UUID, current_user: RequireAuth):
         409: {"model": StandardError, "description": "Session is not running"},
     },
 )
-async def abort_session(session_id: UUID, current_user: RequireAuth):
+async def abort_session(session_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import AuthMiddleware
 from app.routers import (
     comments_router,
     events_router,
@@ -22,6 +23,9 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+# Authentication middleware - enforces JWT auth on all routes except public ones
+app.add_middleware(AuthMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

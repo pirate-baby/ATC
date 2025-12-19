@@ -2,7 +2,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.auth import RequireAuth
 from app.schemas import HAT, HATCreate, HATType, HATUpdate, PaginatedResponse, StandardError
 
 router = APIRouter()
@@ -16,7 +15,6 @@ router = APIRouter()
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
 async def list_hats(
-    current_user: RequireAuth,
     type: HATType | None = Query(default=None, description="Filter by HAT type"),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
@@ -35,7 +33,7 @@ async def list_hats(
         401: {"model": StandardError, "description": "Unauthorized"},
     },
 )
-async def create_hat(current_user: RequireAuth, hat: HATCreate):
+async def create_hat(hat: HATCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -49,7 +47,7 @@ async def create_hat(current_user: RequireAuth, hat: HATCreate):
         404: {"model": StandardError, "description": "HAT not found"},
     },
 )
-async def get_hat(hat_id: UUID, current_user: RequireAuth):
+async def get_hat(hat_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -64,7 +62,7 @@ async def get_hat(hat_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "HAT not found"},
     },
 )
-async def update_hat(hat_id: UUID, current_user: RequireAuth, hat: HATUpdate):
+async def update_hat(hat_id: UUID, hat: HATUpdate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -78,5 +76,5 @@ async def update_hat(hat_id: UUID, current_user: RequireAuth, hat: HATUpdate):
         404: {"model": StandardError, "description": "HAT not found"},
     },
 )
-async def delete_hat(hat_id: UUID, current_user: RequireAuth):
+async def delete_hat(hat_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")

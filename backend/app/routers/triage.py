@@ -2,7 +2,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.auth import RequireAuth
 from app.schemas import (
     PaginatedResponse,
     Plan,
@@ -26,7 +25,6 @@ router = APIRouter()
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
 async def list_connections(
-    current_user: RequireAuth,
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
@@ -44,7 +42,7 @@ async def list_connections(
         401: {"model": StandardError, "description": "Unauthorized"},
     },
 )
-async def create_connection(current_user: RequireAuth, connection: TriageConnectionCreate):
+async def create_connection(connection: TriageConnectionCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -58,7 +56,7 @@ async def create_connection(current_user: RequireAuth, connection: TriageConnect
         404: {"model": StandardError, "description": "Connection not found"},
     },
 )
-async def get_connection(connection_id: UUID, current_user: RequireAuth):
+async def get_connection(connection_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -73,9 +71,7 @@ async def get_connection(connection_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Connection not found"},
     },
 )
-async def update_connection(
-    connection_id: UUID, current_user: RequireAuth, connection: TriageConnectionUpdate
-):
+async def update_connection(connection_id: UUID, connection: TriageConnectionUpdate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -89,7 +85,7 @@ async def update_connection(
         404: {"model": StandardError, "description": "Connection not found"},
     },
 )
-async def delete_connection(connection_id: UUID, current_user: RequireAuth):
+async def delete_connection(connection_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -102,7 +98,7 @@ async def delete_connection(connection_id: UUID, current_user: RequireAuth):
         404: {"model": StandardError, "description": "Connection not found"},
     },
 )
-async def sync_connection(connection_id: UUID, current_user: RequireAuth):
+async def sync_connection(connection_id: UUID):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -118,7 +114,6 @@ async def sync_connection(connection_id: UUID, current_user: RequireAuth):
 )
 async def list_connection_items(
     connection_id: UUID,
-    current_user: RequireAuth,
     status: TriageItemStatus | None = Query(default=None, description="Filter by status"),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
@@ -138,7 +133,7 @@ async def list_connection_items(
         404: {"model": StandardError, "description": "Item not found"},
     },
 )
-async def plan_from_item(item_id: UUID, current_user: RequireAuth, plan_request: TriageItemPlan):
+async def plan_from_item(item_id: UUID, plan_request: TriageItemPlan):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
@@ -152,7 +147,5 @@ async def plan_from_item(item_id: UUID, current_user: RequireAuth, plan_request:
         404: {"model": StandardError, "description": "Item not found"},
     },
 )
-async def reject_item(
-    item_id: UUID, current_user: RequireAuth, reject_request: TriageItemReject | None = None
-):
+async def reject_item(item_id: UUID, reject_request: TriageItemReject | None = None):
     raise HTTPException(status_code=501, detail="Not implemented")
