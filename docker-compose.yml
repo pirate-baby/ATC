@@ -32,6 +32,7 @@ x-frontend-base: &frontend-base
 
 x-db-environment: &db-environment
   DATABASE_URL: postgresql+psycopg2://atc:atc_dev@db:5432/atc
+  JWT_SECRET_KEY: atc-dev-jwt-secret-do-not-use-in-production
 
 services:
   # =============================================================================
