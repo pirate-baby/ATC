@@ -1,9 +1,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import get_session
+from app.database import get_db
 from app.models.plan import Plan as PlanModel
 from app.models.project import Project as ProjectModel
 from app.models.review import Review as ReviewModel
@@ -17,7 +18,6 @@ from app.schemas import (
     Review,
     ReviewCreate,
     ReviewDecision,
-    StandardError,
 )
 from app.schemas.plan import ReviewSummary, TaskSummary, ThreadSummary
 from app.schemas.review import ReviewTargetType
@@ -25,28 +25,21 @@ from app.schemas.review import ReviewTargetType
 router = APIRouter()
 
 
-@router.get(
-    "/projects/{project_id}/plans",
-    response_model=PaginatedResponse[Plan],
-    summary="List plans in project",
-    description="Retrieve a paginated list of plans in a project with optional status filtering.",
-    responses={
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Project not found"},
-    },
-)
+@router.get("/projects/{project_id}/plans", response_model=PaginatedResponse[Plan])
 async def list_project_plans(
     project_id: UUID,
-    status: PlanTaskStatus | None = Query(default=None, description="Filter by status"),
-    page: int = Query(default=1, ge=1, description="Page number"),
-    limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
-    session: Session = Depends(get_session),
+    status: PlanTaskStatus | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
 ):
-    project = ProjectModel.get_or_404(session, project_id)
+    project = db.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
     plans = project.plans
     if status is not None:
-        plans = [p for p in plans if p.status == status.value]
+        plans = [p for p in plans if p.status == status]
 
     total = len(plans)
     offset = (page - 1) * limit
@@ -66,16 +59,13 @@ async def list_project_plans(
     "/projects/{project_id}/plans",
     response_model=Plan,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new plan",
-    description="Create a new plan in the specified project.",
-    responses={
-        400: {"model": StandardError, "description": "Validation error"},
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Project not found"},
-    },
 )
-async def create_plan(project_id: UUID, plan: PlanCreate, session: Session = Depends(get_session)):
-    ProjectModel.get_or_404(session, project_id)
+async def create_plan(
+    project_id: UUID, plan: PlanCreate, db: Session = Depends(get_db)
+):
+    project = db.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
     new_plan = PlanModel(
         project_id=project_id,
@@ -83,26 +73,19 @@ async def create_plan(project_id: UUID, plan: PlanCreate, session: Session = Dep
         content=plan.content,
         parent_task_id=plan.parent_task_id,
     )
-    session.add(new_plan)
-    session.flush()
+    db.add(new_plan)
+    db.flush()
     return new_plan
 
 
-@router.get(
-    "/plans/{plan_id}",
-    response_model=PlanWithDetails,
-    summary="Get plan by ID",
-    description="Retrieve a plan with full details including tasks, reviews, and threads.",
-    responses={
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Plan not found"},
-    },
-)
-async def get_plan(plan_id: UUID, session: Session = Depends(get_session)):
-    plan = PlanModel.get_or_404(session, plan_id)
+@router.get("/plans/{plan_id}", response_model=PlanWithDetails)
+async def get_plan(plan_id: UUID, db: Session = Depends(get_db)):
+    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
 
     tasks = [
-        TaskSummary(id=task.id, title=task.title, status=PlanTaskStatus(task.status))
+        TaskSummary(id=task.id, title=task.title, status=task.status)
         for task in plan.tasks
     ]
 
@@ -117,8 +100,10 @@ async def get_plan(plan_id: UUID, session: Session = Depends(get_session)):
     ]
 
     threads = [
-        ThreadSummary(id=thread.id, status=thread.status, comment_count=len(thread.comments))
-        for thread in plan.threads
+        ThreadSummary(
+            id=thread.id, status=thread.target_type.value, comment_count=len(thread.comments)
+        )
+        for thread in plan.comment_threads
     ]
 
     return PlanWithDetails(
@@ -126,7 +111,7 @@ async def get_plan(plan_id: UUID, session: Session = Depends(get_session)):
         project_id=plan.project_id,
         title=plan.title,
         content=plan.content,
-        status=PlanTaskStatus(plan.status),
+        status=plan.status,
         parent_task_id=plan.parent_task_id,
         version=plan.version,
         created_by=plan.created_by,
@@ -138,19 +123,11 @@ async def get_plan(plan_id: UUID, session: Session = Depends(get_session)):
     )
 
 
-@router.patch(
-    "/plans/{plan_id}",
-    response_model=Plan,
-    summary="Update plan",
-    description="Update an existing plan's title or content.",
-    responses={
-        400: {"model": StandardError, "description": "Validation error"},
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Plan not found"},
-    },
-)
-async def update_plan(plan_id: UUID, plan: PlanUpdate, session: Session = Depends(get_session)):
-    db_plan = PlanModel.get_or_404(session, plan_id)
+@router.patch("/plans/{plan_id}", response_model=Plan)
+async def update_plan(plan_id: UUID, plan: PlanUpdate, db: Session = Depends(get_db)):
+    db_plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
+    if not db_plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
 
     update_data = plan.model_dump(exclude_unset=True)
     if update_data:
@@ -158,56 +135,35 @@ async def update_plan(plan_id: UUID, plan: PlanUpdate, session: Session = Depend
             setattr(db_plan, key, value)
         db_plan.version += 1
 
-    session.flush()
+    db.flush()
     return db_plan
 
 
-@router.delete(
-    "/plans/{plan_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete plan",
-    description="Delete a plan and all associated tasks.",
-    responses={
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Plan not found"},
-    },
-)
-async def delete_plan(plan_id: UUID, session: Session = Depends(get_session)):
-    db_plan = PlanModel.get_or_404(session, plan_id)
-    session.delete(db_plan)
-    session.flush()
+@router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_plan(plan_id: UUID, db: Session = Depends(get_db)):
+    db_plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
+    if not db_plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    db.delete(db_plan)
+    db.flush()
 
 
-@router.get(
-    "/plans/{plan_id}/tasks",
-    response_model=list[TaskSummary],
-    summary="List tasks spawned by plan",
-    description="Retrieve all tasks that were created from this plan.",
-    responses={
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Plan not found"},
-    },
-)
-async def list_plan_tasks(plan_id: UUID, session: Session = Depends(get_session)):
-    plan = PlanModel.get_or_404(session, plan_id)
+@router.get("/plans/{plan_id}/tasks", response_model=list[TaskSummary])
+async def list_plan_tasks(plan_id: UUID, db: Session = Depends(get_db)):
+    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
     return [
-        TaskSummary(id=task.id, title=task.title, status=PlanTaskStatus(task.status))
+        TaskSummary(id=task.id, title=task.title, status=task.status)
         for task in plan.tasks
     ]
 
 
-@router.get(
-    "/plans/{plan_id}/reviews",
-    response_model=list[Review],
-    summary="List plan reviews",
-    description="Retrieve all reviews submitted for this plan.",
-    responses={
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Plan not found"},
-    },
-)
-async def list_plan_reviews(plan_id: UUID, session: Session = Depends(get_session)):
-    plan = PlanModel.get_or_404(session, plan_id)
+@router.get("/plans/{plan_id}/reviews", response_model=list[Review])
+async def list_plan_reviews(plan_id: UUID, db: Session = Depends(get_db)):
+    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
     return plan.reviews
 
 
@@ -215,63 +171,46 @@ async def list_plan_reviews(plan_id: UUID, session: Session = Depends(get_sessio
     "/plans/{plan_id}/reviews",
     response_model=Review,
     status_code=status.HTTP_201_CREATED,
-    summary="Submit a plan review",
-    description="Submit a review (approve, request changes, or comment) for a plan.",
-    responses={
-        400: {"model": StandardError, "description": "Validation error"},
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Plan not found"},
-        409: {"model": StandardError, "description": "Plan not in review state"},
-    },
 )
 async def create_plan_review(
     plan_id: UUID,
     review: ReviewCreate,
     reviewer_id: UUID = Query(description="ID of the reviewer"),
-    session: Session = Depends(get_session),
+    db: Session = Depends(get_db),
 ):
-    plan = PlanModel.get_or_404(session, plan_id)
+    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
 
-    if plan.status != PlanTaskStatus.REVIEW.value:
+    if plan.status != PlanTaskStatus.REVIEW:
         raise HTTPException(status_code=409, detail="Plan not in review state")
 
     new_review = ReviewModel(
-        target_type=ReviewTargetType.PLAN.value,
+        target_type=ReviewTargetType.PLAN,
         target_id=plan_id,
         reviewer_id=reviewer_id,
-        decision=review.decision.value,
+        decision=review.decision,
         comment=review.comment,
     )
-    session.add(new_review)
-    session.flush()
+    db.add(new_review)
+    db.flush()
     return new_review
 
 
-@router.post(
-    "/plans/{plan_id}/approve",
-    response_model=Plan,
-    summary="Approve plan",
-    description="Approve the plan after sufficient approvals. Creates tasks automatically.",
-    responses={
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "Plan not found"},
-        409: {
-            "model": StandardError,
-            "description": "Insufficient approvals or plan not in review state",
-        },
-    },
-)
-async def approve_plan(plan_id: UUID, session: Session = Depends(get_session)):
-    plan = PlanModel.get_or_404(session, plan_id)
+@router.post("/plans/{plan_id}/approve", response_model=Plan)
+async def approve_plan(plan_id: UUID, db: Session = Depends(get_db)):
+    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
 
-    if plan.status != PlanTaskStatus.REVIEW.value:
+    if plan.status != PlanTaskStatus.REVIEW:
         raise HTTPException(status_code=409, detail="Plan not in review state")
 
     project_settings = plan.project.settings
     required_approvals = project_settings.required_approvals_plan if project_settings else 1
 
     approval_count = sum(
-        1 for review in plan.reviews if review.decision == ReviewDecision.APPROVED.value
+        1 for review in plan.reviews if review.decision == ReviewDecision.APPROVED
     )
 
     if approval_count < required_approvals:
@@ -280,6 +219,6 @@ async def approve_plan(plan_id: UUID, session: Session = Depends(get_session)):
             detail=f"Insufficient approvals: {approval_count}/{required_approvals} required",
         )
 
-    plan.status = PlanTaskStatus.APPROVED.value
-    session.flush()
+    plan.status = PlanTaskStatus.APPROVED
+    db.flush()
     return plan
