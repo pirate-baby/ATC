@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
-from app.database import get_db
+from app.database import get_db, get_or_404
 from app.models.user import User as UserModel
 from app.schemas import PaginatedResponse, User
 
@@ -49,15 +49,9 @@ async def get_current_user_endpoint(
     db: Session = Depends(get_db),
 ):
     user_id = _get_user_id_from_request(request)
-    user = db.query(UserModel).filter(UserModel.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return User.model_validate(user)
+    return get_or_404(db, UserModel, user_id)
 
 
 @router.get("/users/{user_id}", response_model=User)
 async def get_user(user_id: UUID, db: Session = Depends(get_db)):
-    user = db.query(UserModel).filter(UserModel.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return User.model_validate(user)
+    return get_or_404(db, UserModel, user_id)

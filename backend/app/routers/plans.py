@@ -1,10 +1,9 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_db, get_or_404
 from app.models.plan import Plan as PlanModel
 from app.models.project import Project as ProjectModel
 from app.models.review import Review as ReviewModel
@@ -33,9 +32,7 @@ async def list_project_plans(
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    project = db.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_or_404(db, ProjectModel, project_id)
 
     plans = project.plans
     if status is not None:
@@ -63,9 +60,7 @@ async def list_project_plans(
 async def create_plan(
     project_id: UUID, plan: PlanCreate, db: Session = Depends(get_db)
 ):
-    project = db.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    get_or_404(db, ProjectModel, project_id)
 
     new_plan = PlanModel(
         project_id=project_id,
@@ -80,9 +75,7 @@ async def create_plan(
 
 @router.get("/plans/{plan_id}", response_model=PlanWithDetails)
 async def get_plan(plan_id: UUID, db: Session = Depends(get_db)):
-    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    plan = get_or_404(db, PlanModel, plan_id)
 
     tasks = [
         TaskSummary(id=task.id, title=task.title, status=task.status)
@@ -125,9 +118,7 @@ async def get_plan(plan_id: UUID, db: Session = Depends(get_db)):
 
 @router.patch("/plans/{plan_id}", response_model=Plan)
 async def update_plan(plan_id: UUID, plan: PlanUpdate, db: Session = Depends(get_db)):
-    db_plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
-    if not db_plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    db_plan = get_or_404(db, PlanModel, plan_id)
 
     update_data = plan.model_dump(exclude_unset=True)
     if update_data:
@@ -141,18 +132,14 @@ async def update_plan(plan_id: UUID, plan: PlanUpdate, db: Session = Depends(get
 
 @router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_plan(plan_id: UUID, db: Session = Depends(get_db)):
-    db_plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
-    if not db_plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    db_plan = get_or_404(db, PlanModel, plan_id)
     db.delete(db_plan)
     db.flush()
 
 
 @router.get("/plans/{plan_id}/tasks", response_model=list[TaskSummary])
 async def list_plan_tasks(plan_id: UUID, db: Session = Depends(get_db)):
-    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    plan = get_or_404(db, PlanModel, plan_id)
     return [
         TaskSummary(id=task.id, title=task.title, status=task.status)
         for task in plan.tasks
@@ -161,9 +148,7 @@ async def list_plan_tasks(plan_id: UUID, db: Session = Depends(get_db)):
 
 @router.get("/plans/{plan_id}/reviews", response_model=list[Review])
 async def list_plan_reviews(plan_id: UUID, db: Session = Depends(get_db)):
-    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    plan = get_or_404(db, PlanModel, plan_id)
     return plan.reviews
 
 
@@ -178,9 +163,7 @@ async def create_plan_review(
     reviewer_id: UUID = Query(description="ID of the reviewer"),
     db: Session = Depends(get_db),
 ):
-    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    plan = get_or_404(db, PlanModel, plan_id)
 
     if plan.status != PlanTaskStatus.REVIEW:
         raise HTTPException(status_code=409, detail="Plan not in review state")
@@ -199,9 +182,7 @@ async def create_plan_review(
 
 @router.post("/plans/{plan_id}/approve", response_model=Plan)
 async def approve_plan(plan_id: UUID, db: Session = Depends(get_db)):
-    plan = db.scalar(select(PlanModel).where(PlanModel.id == plan_id))
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    plan = get_or_404(db, PlanModel, plan_id)
 
     if plan.status != PlanTaskStatus.REVIEW:
         raise HTTPException(status_code=409, detail="Plan not in review state")

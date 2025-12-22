@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_db, get_or_404
 from app.models.hat import HAT as HATModel
 from app.models.project import ProjectSettings
 from app.schemas import HAT, HATCreate, HATUpdate, PaginatedResponse
@@ -48,17 +48,12 @@ async def create_hat(hat: HATCreate, db: Session = Depends(get_db)):
 
 @router.get("/hats/{hat_id}", response_model=HAT)
 async def get_hat(hat_id: UUID, db: Session = Depends(get_db)):
-    hat = db.scalar(select(HATModel).where(HATModel.id == hat_id))
-    if not hat:
-        raise HTTPException(status_code=404, detail="HAT not found")
-    return hat
+    return get_or_404(db, HATModel, hat_id)
 
 
 @router.patch("/hats/{hat_id}", response_model=HAT)
 async def update_hat(hat_id: UUID, hat: HATUpdate, db: Session = Depends(get_db)):
-    db_hat = db.scalar(select(HATModel).where(HATModel.id == hat_id))
-    if not db_hat:
-        raise HTTPException(status_code=404, detail="HAT not found")
+    db_hat = get_or_404(db, HATModel, hat_id)
 
     update_data = hat.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -70,9 +65,7 @@ async def update_hat(hat_id: UUID, hat: HATUpdate, db: Session = Depends(get_db)
 
 @router.delete("/hats/{hat_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_hat(hat_id: UUID, db: Session = Depends(get_db)):
-    db_hat = db.scalar(select(HATModel).where(HATModel.id == hat_id))
-    if not db_hat:
-        raise HTTPException(status_code=404, detail="HAT not found")
+    db_hat = get_or_404(db, HATModel, hat_id)
 
     project_settings_list = db.scalars(select(ProjectSettings)).all()
     for settings in project_settings_list:

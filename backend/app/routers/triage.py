@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_db, get_or_404
 from app.models.plan import Plan as PlanModel
 from app.models.project import Project as ProjectModel
 from app.models.triage import TriageConnection as TriageConnectionModel
@@ -65,12 +65,7 @@ async def create_connection(
 
 @router.get("/triage-connections/{connection_id}", response_model=TriageConnection)
 async def get_connection(connection_id: UUID, db: Session = Depends(get_db)):
-    connection = db.scalar(
-        select(TriageConnectionModel).where(TriageConnectionModel.id == connection_id)
-    )
-    if not connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
-    return connection
+    return get_or_404(db, TriageConnectionModel, connection_id)
 
 
 @router.patch("/triage-connections/{connection_id}", response_model=TriageConnection)
@@ -79,11 +74,7 @@ async def update_connection(
     connection: TriageConnectionUpdate,
     db: Session = Depends(get_db),
 ):
-    db_connection = db.scalar(
-        select(TriageConnectionModel).where(TriageConnectionModel.id == connection_id)
-    )
-    if not db_connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
+    db_connection = get_or_404(db, TriageConnectionModel, connection_id)
 
     update_data = connection.model_dump(exclude_unset=True)
     if update_data:
@@ -98,23 +89,14 @@ async def update_connection(
     "/triage-connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 async def delete_connection(connection_id: UUID, db: Session = Depends(get_db)):
-    db_connection = db.scalar(
-        select(TriageConnectionModel).where(TriageConnectionModel.id == connection_id)
-    )
-    if not db_connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
+    db_connection = get_or_404(db, TriageConnectionModel, connection_id)
     db.delete(db_connection)
     db.flush()
 
 
 @router.post("/triage-connections/{connection_id}/sync")
 async def sync_connection(connection_id: UUID, db: Session = Depends(get_db)):
-    connection = db.scalar(
-        select(TriageConnectionModel).where(TriageConnectionModel.id == connection_id)
-    )
-    if not connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
-
+    get_or_404(db, TriageConnectionModel, connection_id)
     sync_id = uuid4()
 
     return {
@@ -135,11 +117,7 @@ async def list_connection_items(
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    connection = db.scalar(
-        select(TriageConnectionModel).where(TriageConnectionModel.id == connection_id)
-    )
-    if not connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
+    connection = get_or_404(db, TriageConnectionModel, connection_id)
 
     items = connection.items
     if status is not None:
@@ -167,20 +145,12 @@ async def list_connection_items(
 async def plan_from_item(
     item_id: UUID, plan_request: TriageItemPlan, db: Session = Depends(get_db)
 ):
-    triage_item = db.scalar(
-        select(TriageItemModel).where(TriageItemModel.id == item_id)
-    )
-    if not triage_item:
-        raise HTTPException(status_code=404, detail="Triage item not found")
+    triage_item = get_or_404(db, TriageItemModel, item_id, "Triage item not found")
 
     if triage_item.plan_id is not None:
         raise HTTPException(status_code=409, detail="Triage item already has a plan")
 
-    project = db.scalar(
-        select(ProjectModel).where(ProjectModel.id == plan_request.project_id)
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    get_or_404(db, ProjectModel, plan_request.project_id)
 
     new_plan = PlanModel(
         project_id=plan_request.project_id,
@@ -203,11 +173,7 @@ async def reject_item(
     reject_request: TriageItemReject | None = None,
     db: Session = Depends(get_db),
 ):
-    triage_item = db.scalar(
-        select(TriageItemModel).where(TriageItemModel.id == item_id)
-    )
-    if not triage_item:
-        raise HTTPException(status_code=404, detail="Triage item not found")
+    triage_item = get_or_404(db, TriageItemModel, item_id, "Triage item not found")
 
     if triage_item.status != TriageItemStatus.PENDING:
         raise HTTPException(
