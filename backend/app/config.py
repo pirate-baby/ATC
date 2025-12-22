@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg2://atc:atc_dev@db:5432/atc"
     environment: str = "development"
 
-    # JWT Configuration
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
