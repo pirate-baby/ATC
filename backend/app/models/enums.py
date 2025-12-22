@@ -31,6 +31,12 @@ class CommentThreadTargetType(str, Enum):
     LINE = "line"
 
 
+class CommentThreadStatus(str, Enum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    SUMMARIZED = "summarized"
+
+
 class ReviewTargetType(str, Enum):
     PLAN = "plan"
     TASK = "task"

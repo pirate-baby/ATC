@@ -226,6 +226,8 @@ def _create_tables_sqlite(engine):
                 target_id TEXT NOT NULL,
                 file_path TEXT,
                 line_number INTEGER,
+                status TEXT DEFAULT 'open' NOT NULL,
+                summary TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
             )
         """
