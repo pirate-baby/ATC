@@ -1,7 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
+from app.auth import validate_websocket_token
 from app.schemas import (
     CodingSession,
     CodingSessionStatus,
@@ -20,7 +21,9 @@ router = APIRouter()
     responses={401: {"model": StandardError, "description": "Unauthorized"}},
 )
 async def list_sessions(
-    status: CodingSessionStatus | None = Query(default=None, description="Filter by status"),
+    status_filter: CodingSessionStatus | None = Query(
+        default=None, alias="status", description="Filter by status"
+    ),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
@@ -71,9 +74,8 @@ async def session_stream(websocket: WebSocket, session_id: UUID):
     Client-to-Server messages:
     - abort: {"type": "abort"}
     """
-    token = websocket.query_params.get("token")
-    if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+    current_user = await validate_websocket_token(websocket)
+    if current_user is None:
         return
 
     await websocket.accept()
