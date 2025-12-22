@@ -78,7 +78,7 @@ class TestDecodeJwtToken:
             decode_jwt_token(token)
 
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert "subject" in str(exc_info.value.detail).lower()
+        assert "missing required claims" in str(exc_info.value.detail).lower()
 
     def test_missing_expiration_claim(self):
         """Test that tokens without expiration claim are rejected."""
@@ -88,7 +88,7 @@ class TestDecodeJwtToken:
             decode_jwt_token(token)
 
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert "expiration" in str(exc_info.value.detail).lower()
+        assert "missing required claims" in str(exc_info.value.detail).lower()
 
     def test_invalid_signature(self):
         """Test that tokens with invalid signatures are rejected."""
@@ -234,28 +234,18 @@ class TestWebSocketAuth:
 
 
 class TestTokenPayloadModel:
-    """Tests for the TokenPayload Pydantic model."""
-
     def test_token_payload_creation(self):
-        """Test creating a TokenPayload instance."""
         now = datetime.now(timezone.utc)
         payload = TokenPayload(
             sub="user123",
             exp=now + timedelta(hours=1),
-            iat=now,
-            iss="test_issuer",
-            aud="test_audience",
         )
         assert payload.sub == "user123"
-        assert payload.iss == "test_issuer"
-        assert payload.aud == "test_audience"
+        assert payload.exp > now
 
 
 class TestCurrentUserModel:
-    """Tests for the CurrentUser model."""
-
     def test_current_user_creation(self):
-        """Test creating a CurrentUser instance."""
         user_id = uuid4()
         now = datetime.now(timezone.utc)
         payload = TokenPayload(
