@@ -1,108 +1,88 @@
-import uuid
+from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Table, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.schemas.common import PlanTaskStatus
+from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.enums import PlanTaskStatus
 
-# Self-referential many-to-many for task blocking relationships (DAG)
+# Association table for task blocking relationships (DAG)
 task_blocking = Table(
     "task_blocking",
     Base.metadata,
     Column(
-        "blocked_task_id",
-        UUID(as_uuid=True),
+        "task_id",
+        PG_UUID(as_uuid=True),
         ForeignKey("tasks.id", ondelete="CASCADE"),
         primary_key=True,
     ),
     Column(
-        "blocking_task_id",
-        UUID(as_uuid=True),
+        "blocked_by_id",
+        PG_UUID(as_uuid=True),
         ForeignKey("tasks.id", ondelete="CASCADE"),
         primary_key=True,
     ),
 )
 
 
-class Task(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class Task(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "tasks"
 
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+    project_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
-    plan_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("plans.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
+    plan_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("plans.id", ondelete="SET NULL"), nullable=True
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(50), default=PlanTaskStatus.BACKLOG.value, nullable=False, index=True
+    status: Mapped[PlanTaskStatus] = mapped_column(
+        Enum(PlanTaskStatus, name="plan_task_status", native_enum=True, create_type=False),
+        default=PlanTaskStatus.BACKLOG,
+        nullable=False,
     )
     branch_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    worktree_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    worktree_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
-    # Relationships
-    project: Mapped["Project"] = relationship(  # noqa: F821
-        "Project", back_populates="tasks", lazy="selectin"
+    # Coding session fields (merged from CodingSession)
+    session_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
-    plan: Mapped["Plan | None"] = relationship(  # noqa: F821
-        "Plan", back_populates="tasks", foreign_keys=[plan_id], lazy="selectin"
+    session_ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    session_output_log: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    project: Mapped["Project"] = relationship("Project", back_populates="tasks")
+    plan: Mapped["Plan | None"] = relationship(
+        "Plan", back_populates="tasks", foreign_keys=[plan_id]
+    )
+    child_plans: Mapped[list["Plan"]] = relationship(
+        "Plan", back_populates="parent_task", foreign_keys="Plan.parent_task_id"
     )
 
-    # Self-referential many-to-many: blocked_by tasks that must complete before this task
+    # DAG blocking relationship (many-to-many self-referential)
     blocked_by: Mapped[list["Task"]] = relationship(
         "Task",
         secondary=task_blocking,
-        primaryjoin="Task.id == task_blocking.c.blocked_task_id",
-        secondaryjoin="Task.id == task_blocking.c.blocking_task_id",
+        primaryjoin="Task.id == task_blocking.c.task_id",
+        secondaryjoin="Task.id == task_blocking.c.blocked_by_id",
         backref="blocks",
-        lazy="selectin",
     )
 
-    # Tasks can spawn sub-plans (for complex tasks)
-    spawned_plans: Mapped[list["Plan"]] = relationship(  # noqa: F821
-        "Plan",
-        back_populates="parent_task",
-        foreign_keys="[Plan.parent_task_id]",
-        lazy="selectin",
-    )
-
-    reviews: Mapped[list["Review"]] = relationship(  # noqa: F821
-        "Review",
-        primaryjoin=(
-            "and_(Task.id == foreign(Review.target_id), "
-            "Review.target_type == 'task')"
-        ),
-        lazy="selectin",
-        viewonly=True,
-    )
-    threads: Mapped[list["CommentThread"]] = relationship(  # noqa: F821
+    comment_threads: Mapped[list["CommentThread"]] = relationship(
         "CommentThread",
-        primaryjoin=(
-            "and_(Task.id == foreign(CommentThread.target_id), "
-            "CommentThread.target_type.in_(['task', 'code_line']))"
-        ),
-        lazy="selectin",
+        primaryjoin="and_(Task.id == foreign(CommentThread.target_id), "
+        "CommentThread.target_type.in_(['task', 'line']))",
         viewonly=True,
     )
-    coding_sessions: Mapped[list["CodingSession"]] = relationship(  # noqa: F821
-        "CodingSession",
-        primaryjoin=(
-            "and_(Task.id == foreign(CodingSession.target_id), "
-            "CodingSession.target_type == 'task')"
-        ),
-        lazy="selectin",
+    reviews: Mapped[list["Review"]] = relationship(
+        "Review",
+        primaryjoin="and_(Task.id == foreign(Review.target_id), "
+        "Review.target_type == 'task')",
         viewonly=True,
     )
-
-    def __repr__(self) -> str:
-        return f"<Task(id={self.id}, title={self.title}, status={self.status})>"

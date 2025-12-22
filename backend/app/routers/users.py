@@ -1,35 +1,37 @@
-from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db import get_session
+from app.auth import get_current_user
+from app.database import get_db
 from app.models.user import User as UserModel
-from app.schemas import PaginatedResponse, StandardError, User
+from app.schemas import PaginatedResponse, User
 
 router = APIRouter()
 
-MOCK_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+
+def _get_user_id_from_request(request: Request) -> UUID:
+    impersonate_header = request.headers.get("X-Impersonate-User")
+    if impersonate_header:
+        try:
+            return UUID(impersonate_header)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid X-Impersonate-User UUID")
+    return get_current_user(request).id
 
 
-@router.get(
-    "/users",
-    response_model=PaginatedResponse[User],
-    summary="List users",
-    description="Retrieve a paginated list of all users.",
-    responses={401: {"model": StandardError, "description": "Unauthorized"}},
-)
+@router.get("/users", response_model=PaginatedResponse[User])
 async def list_users(
-    page: int = Query(default=1, ge=1, description="Page number"),
-    limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
-    session: Session = Depends(get_session),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
 ):
     offset = (page - 1) * limit
 
-    items = session.scalars(select(UserModel).offset(offset).limit(limit)).all()
-    total = session.scalar(select(func.count()).select_from(UserModel)) or 0
+    items = db.scalars(select(UserModel).offset(offset).limit(limit)).all()
+    total = db.scalar(select(func.count()).select_from(UserModel)) or 0
     pages = (total + limit - 1) // limit if total > 0 else 0
 
     return PaginatedResponse[User](
@@ -41,34 +43,21 @@ async def list_users(
     )
 
 
-@router.get(
-    "/users/me",
-    response_model=User,
-    summary="Get current user",
-    description="Retrieve the currently authenticated user's profile. "
-    "Returns a placeholder user until authentication is implemented.",
-    responses={401: {"model": StandardError, "description": "Unauthorized"}},
-)
-async def get_current_user():
-    return User(
-        id=MOCK_USER_ID,
-        git_handle="current_user",
-        email="current_user@example.com",
-        display_name="Current User (placeholder)",
-        avatar_url=None,
-        created_at=datetime.now(timezone.utc),
-    )
+@router.get("/users/me", response_model=User)
+async def get_current_user_endpoint(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = _get_user_id_from_request(request)
+    user = db.query(UserModel).filter(UserModel.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return User.model_validate(user)
 
 
-@router.get(
-    "/users/{user_id}",
-    response_model=User,
-    summary="Get user by ID",
-    description="Retrieve a specific user by their unique identifier.",
-    responses={
-        401: {"model": StandardError, "description": "Unauthorized"},
-        404: {"model": StandardError, "description": "User not found"},
-    },
-)
-async def get_user(user_id: UUID, session: Session = Depends(get_session)):
-    return UserModel.get_or_404(session, user_id)
+@router.get("/users/{user_id}", response_model=User)
+async def get_user(user_id: UUID, db: Session = Depends(get_db)):
+    user = db.query(UserModel).filter(UserModel.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return User.model_validate(user)
