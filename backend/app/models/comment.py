@@ -5,7 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAtMixin, TimestampMixin, UUIDMixin
-from app.models.enums import CommentThreadTargetType
+from app.models.enums import CommentThreadStatus, CommentThreadTargetType
 
 
 class CommentThread(Base, UUIDMixin, CreatedAtMixin):
@@ -18,6 +18,12 @@ class CommentThread(Base, UUIDMixin, CreatedAtMixin):
     target_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
     file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[CommentThreadStatus] = mapped_column(
+        Enum(CommentThreadStatus, name="comment_thread_status", native_enum=True, create_type=False),
+        default=CommentThreadStatus.OPEN,
+        nullable=False,
+    )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     comments: Mapped[list["Comment"]] = relationship(
