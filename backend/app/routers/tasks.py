@@ -1,12 +1,19 @@
+from collections import deque
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
 
+from app.database import get_db, get_or_404
+from app.models.enums import PlanTaskStatus, ReviewDecision, ReviewTargetType
+from app.models.plan import Plan as PlanModel
+from app.models.project import Project as ProjectModel
+from app.models.review import Review as ReviewModel
+from app.models.task import Task as TaskModel
 from app.schemas import (
     CodeDiff,
     PaginatedResponse,
     Plan,
-    PlanTaskStatus,
     Review,
     ReviewCreate,
     StandardError,
@@ -15,9 +22,174 @@ from app.schemas import (
     TaskUpdate,
     TaskWithDetails,
 )
-from app.schemas.task import BlockingTasksUpdate, TaskSummary
+from app.schemas.common import PlanTaskStatus as SchemaPlanTaskStatus
+from app.schemas.task import (
+    BlockingTasksUpdate,
+    PlanSummary,
+    ReviewSummary,
+    SessionSummary,
+    TaskSummary,
+    ThreadSummary,
+)
 
 router = APIRouter()
+
+
+# =============================================================================
+# Private Helper Functions
+# =============================================================================
+
+
+def _detect_cycle(
+    task_id: UUID,
+    new_blocked_by: list[UUID],
+    session: Session,
+) -> bool:
+    """
+    Detect if adding new_blocked_by to task_id would create a cycle in the DAG.
+
+    Uses BFS to check if task_id is reachable from any of the new_blocked_by tasks
+    following the blocked_by relationships. If task_id is reachable, adding the
+    new edges would create a cycle.
+    """
+    if not new_blocked_by:
+        return False
+    if task_id in new_blocked_by:
+        return True
+
+    visited: set[UUID] = set()
+    queue: deque[UUID] = deque(new_blocked_by)
+
+    while queue:
+        current_id = queue.popleft()
+        if current_id in visited:
+            continue
+        visited.add(current_id)
+
+        current_task = session.get(TaskModel, current_id)
+        if current_task is None:
+            continue
+
+        for blocker in current_task.blocked_by:
+            if blocker.id == task_id:
+                return True
+            if blocker.id not in visited:
+                queue.append(blocker.id)
+
+    return False
+
+
+def _validate_blocking_tasks(
+    blocking_ids: list[UUID],
+    project_id: UUID,
+    db: Session,
+) -> list[TaskModel]:
+    """Validate that all blocking tasks exist and belong to the same project."""
+    blocking_tasks: list[TaskModel] = []
+    for blocking_id in blocking_ids:
+        blocking_task = get_or_404(
+            db, TaskModel, blocking_id, detail=f"Blocking task {blocking_id} not found"
+        )
+        if blocking_task.project_id != project_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Blocking task {blocking_id} belongs to a different project",
+            )
+        blocking_tasks.append(blocking_task)
+    return blocking_tasks
+
+
+def _has_incomplete_blockers(blocking_tasks: list[TaskModel]) -> bool:
+    """Check if any blocking tasks are not yet complete."""
+    return any(
+        t.status not in (PlanTaskStatus.MERGED, PlanTaskStatus.CLOSED)
+        for t in blocking_tasks
+    )
+
+
+def _apply_blocking_tasks(
+    task: TaskModel,
+    blocking_tasks: list[TaskModel],
+    db: Session,
+) -> None:
+    """Apply blocking tasks to a task, checking for cycles and updating status."""
+    if not blocking_tasks:
+        return
+
+    if _detect_cycle(task.id, [t.id for t in blocking_tasks], db):
+        raise HTTPException(
+            status_code=409,
+            detail="Adding these blocking tasks would create a circular dependency",
+        )
+
+    task.blocked_by = blocking_tasks
+    if _has_incomplete_blockers(blocking_tasks):
+        task.status = PlanTaskStatus.BLOCKED
+
+
+def _update_task_status_for_blockers(
+    task: TaskModel,
+    blocking_tasks: list[TaskModel],
+) -> None:
+    """Update task status based on presence and completion of blockers."""
+    if blocking_tasks:
+        if _has_incomplete_blockers(blocking_tasks) and task.status == PlanTaskStatus.BACKLOG:
+            task.status = PlanTaskStatus.BLOCKED
+    elif task.status == PlanTaskStatus.BLOCKED:
+        task.status = PlanTaskStatus.BACKLOG
+
+
+def _build_plan_summary(task: TaskModel) -> PlanSummary | None:
+    """Build a plan summary from a task's parent plan."""
+    if not task.plan:
+        return None
+    return PlanSummary(
+        id=task.plan.id,
+        title=task.plan.title,
+        status=SchemaPlanTaskStatus(task.plan.status.value),
+    )
+
+
+def _build_blocking_tasks_summaries(task: TaskModel) -> list[TaskSummary]:
+    """Build summaries of tasks that block this task."""
+    return [
+        TaskSummary(id=t.id, title=t.title, status=SchemaPlanTaskStatus(t.status.value))
+        for t in task.blocked_by
+    ]
+
+
+def _build_reviews_summaries(task: TaskModel) -> list[ReviewSummary]:
+    """Build summaries of reviews on this task."""
+    return [
+        ReviewSummary(
+            id=r.id,
+            reviewer_id=r.reviewer_id,
+            decision=r.decision.value,
+            created_at=r.created_at,
+        )
+        for r in task.reviews
+    ]
+
+
+def _build_threads_summaries(task: TaskModel) -> list[ThreadSummary]:
+    """Build summaries of comment threads on this task."""
+    return [
+        ThreadSummary(id=t.id, status="open", comment_count=len(t.comments))
+        for t in task.comment_threads
+    ]
+
+
+def _build_active_session(task: TaskModel) -> SessionSummary | None:
+    """Build active session summary if task has an active session."""
+    if not task.session_started_at or task.session_ended_at:
+        return None
+    return SessionSummary(
+        id=task.id,
+        status="active",
+        started_at=task.session_started_at,
+    )
+
+
 
 
 @router.get(
@@ -32,11 +204,29 @@ router = APIRouter()
 )
 async def list_project_tasks(
     project_id: UUID,
-    status: PlanTaskStatus | None = Query(default=None, description="Filter by status"),
+    status: SchemaPlanTaskStatus | None = Query(default=None, description="Filter by status"),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    db: Session = Depends(get_db),
 ):
-    raise HTTPException(status_code=501, detail="Not implemented")
+    project = get_or_404(db, ProjectModel, project_id)
+
+    tasks = project.tasks
+    if status is not None:
+        tasks = [t for t in tasks if t.status == PlanTaskStatus(status.value)]
+
+    total = len(tasks)
+    offset = (page - 1) * limit
+    items = tasks[offset : offset + limit]
+    pages = (total + limit - 1) // limit if total > 0 else 0
+
+    return PaginatedResponse[Task](
+        items=[Task.model_validate(t) for t in items],
+        total=total,
+        page=page,
+        limit=limit,
+        pages=pages,
+    )
 
 
 @router.post(
@@ -52,8 +242,31 @@ async def list_project_tasks(
         409: {"model": StandardError, "description": "Circular dependency detected"},
     },
 )
-async def create_task(project_id: UUID, task: TaskCreate):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def create_task(
+    project_id: UUID,
+    task: TaskCreate,
+    db: Session = Depends(get_db),
+):
+    get_or_404(db, ProjectModel, project_id)
+
+    if task.plan_id is not None:
+        get_or_404(db, PlanModel, task.plan_id, detail="Plan not found")
+
+    blocking_tasks = _validate_blocking_tasks(task.blocked_by, project_id, db)
+
+    new_task = TaskModel(
+        project_id=project_id,
+        plan_id=task.plan_id,
+        title=task.title,
+        description=task.description,
+    )
+    db.add(new_task)
+    db.flush()
+
+    _apply_blocking_tasks(new_task, blocking_tasks, db)
+
+    db.flush()
+    return Task.model_validate(new_task)
 
 
 @router.get(
@@ -66,8 +279,28 @@ async def create_task(project_id: UUID, task: TaskCreate):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def get_task(task_id: UUID):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def get_task(task_id: UUID, db: Session = Depends(get_db)):
+    task = get_or_404(db, TaskModel, task_id)
+
+    return TaskWithDetails(
+        id=task.id,
+        project_id=task.project_id,
+        plan_id=task.plan_id,
+        title=task.title,
+        description=task.description,
+        status=SchemaPlanTaskStatus(task.status.value),
+        blocked_by=[t.id for t in task.blocked_by],
+        branch_name=task.branch_name,
+        worktree_path=task.worktree_path,
+        version=task.version,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
+        plan=_build_plan_summary(task),
+        blocking_tasks=_build_blocking_tasks_summaries(task),
+        reviews=_build_reviews_summaries(task),
+        threads=_build_threads_summaries(task),
+        active_session=_build_active_session(task),
+    )
 
 
 @router.patch(
@@ -81,8 +314,21 @@ async def get_task(task_id: UUID):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def update_task(task_id: UUID, task: TaskUpdate):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def update_task(
+    task_id: UUID,
+    task: TaskUpdate,
+    db: Session = Depends(get_db),
+):
+    db_task = get_or_404(db, TaskModel, task_id)
+
+    update_data = task.model_dump(exclude_unset=True)
+    if update_data:
+        for key, value in update_data.items():
+            setattr(db_task, key, value)
+        db_task.version += 1
+
+    db.flush()
+    return Task.model_validate(db_task)
 
 
 @router.delete(
@@ -95,8 +341,10 @@ async def update_task(task_id: UUID, task: TaskUpdate):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def delete_task(task_id: UUID):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def delete_task(task_id: UUID, db: Session = Depends(get_db)):
+    db_task = get_or_404(db, TaskModel, task_id)
+    db.delete(db_task)
+    db.flush()
 
 
 @router.get(
@@ -109,8 +357,9 @@ async def delete_task(task_id: UUID):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def get_blocking_tasks(task_id: UUID):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def get_blocking_tasks(task_id: UUID, db: Session = Depends(get_db)):
+    task = get_or_404(db, TaskModel, task_id)
+    return _build_blocking_tasks_summaries(task)
 
 
 @router.put(
@@ -125,8 +374,28 @@ async def get_blocking_tasks(task_id: UUID):
         409: {"model": StandardError, "description": "Circular dependency would be created"},
     },
 )
-async def set_blocking_tasks(task_id: UUID, blocking: BlockingTasksUpdate):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def set_blocking_tasks(
+    task_id: UUID,
+    blocking: BlockingTasksUpdate,
+    db: Session = Depends(get_db),
+):
+    task = get_or_404(db, TaskModel, task_id)
+
+    blocking_tasks = _validate_blocking_tasks(blocking.blocked_by, task.project_id, db)
+
+    if _detect_cycle(task_id, blocking.blocked_by, db):
+        raise HTTPException(
+            status_code=409,
+            detail="Setting these blocking tasks would create a circular dependency",
+        )
+
+    task.blocked_by = blocking_tasks
+    task.version += 1
+
+    _update_task_status_for_blockers(task, blocking_tasks)
+
+    db.flush()
+    return Task.model_validate(task)
 
 
 @router.get(
@@ -139,8 +408,9 @@ async def set_blocking_tasks(task_id: UUID, blocking: BlockingTasksUpdate):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def list_task_reviews(task_id: UUID):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def list_task_reviews(task_id: UUID, db: Session = Depends(get_db)):
+    task = get_or_404(db, TaskModel, task_id)
+    return task.reviews
 
 
 @router.post(
@@ -156,8 +426,27 @@ async def list_task_reviews(task_id: UUID):
         409: {"model": StandardError, "description": "Task not in review state"},
     },
 )
-async def create_task_review(task_id: UUID, review: ReviewCreate):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def create_task_review(
+    task_id: UUID,
+    review: ReviewCreate,
+    reviewer_id: UUID = Query(description="ID of the reviewer"),
+    db: Session = Depends(get_db),
+):
+    task = get_or_404(db, TaskModel, task_id)
+
+    if task.status != PlanTaskStatus.REVIEW:
+        raise HTTPException(status_code=409, detail="Task not in review state")
+
+    new_review = ReviewModel(
+        target_type=ReviewTargetType.TASK,
+        target_id=task_id,
+        reviewer_id=reviewer_id,
+        decision=ReviewDecision(review.decision.value),
+        comment=review.comment,
+    )
+    db.add(new_review)
+    db.flush()
+    return new_review
 
 
 @router.post(
@@ -174,8 +463,60 @@ async def create_task_review(task_id: UUID, review: ReviewCreate):
         },
     },
 )
-async def approve_task(task_id: UUID):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def approve_task(task_id: UUID, db: Session = Depends(get_db)):
+    task = get_or_404(db, TaskModel, task_id)
+
+    if task.status != PlanTaskStatus.REVIEW:
+        raise HTTPException(status_code=409, detail="Task not in review state")
+
+    project_settings = task.project.settings
+    required_approvals = project_settings.required_approvals_task if project_settings else 1
+
+    approval_count = sum(1 for review in task.reviews if review.decision == ReviewDecision.APPROVED)
+
+    if approval_count < required_approvals:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Insufficient approvals: {approval_count}/{required_approvals} required",
+        )
+
+    task.status = PlanTaskStatus.CICD
+    task.version += 1
+    db.flush()
+
+    _update_blocked_tasks(task, db)
+
+    return Task.model_validate(task)
+
+
+def _update_blocked_tasks(completed_task: TaskModel, db: Session) -> None:
+    """
+    Update tasks that were blocked by the completed task.
+
+    When a task reaches a terminal state (MERGED/CLOSED/CICD/APPROVED), check if any
+    tasks that were blocked by it can now be unblocked.
+    """
+    terminal_states = (
+        PlanTaskStatus.MERGED,
+        PlanTaskStatus.CLOSED,
+        PlanTaskStatus.CICD,
+        PlanTaskStatus.APPROVED,
+    )
+    if completed_task.status not in terminal_states:
+        return
+
+    for blocked_task in completed_task.blocks:
+        if blocked_task.status != PlanTaskStatus.BLOCKED:
+            continue
+
+        all_blockers_complete = all(
+            blocker.status in (PlanTaskStatus.MERGED, PlanTaskStatus.CLOSED)
+            for blocker in blocked_task.blocked_by
+        )
+
+        if all_blockers_complete:
+            blocked_task.status = PlanTaskStatus.BACKLOG
+            blocked_task.version += 1
 
 
 @router.post(
@@ -189,8 +530,18 @@ async def approve_task(task_id: UUID):
         404: {"model": StandardError, "description": "Task not found"},
     },
 )
-async def spawn_plan_from_task(task_id: UUID):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def spawn_plan_from_task(task_id: UUID, db: Session = Depends(get_db)):
+    task = get_or_404(db, TaskModel, task_id)
+
+    new_plan = PlanModel(
+        project_id=task.project_id,
+        title=f"Sub-plan: {task.title}",
+        content=task.description,
+        parent_task_id=task_id,
+    )
+    db.add(new_plan)
+    db.flush()
+    return new_plan
 
 
 @router.get(
@@ -203,5 +554,6 @@ async def spawn_plan_from_task(task_id: UUID):
         404: {"model": StandardError, "description": "Task not found or no branch exists"},
     },
 )
-async def get_task_diff(task_id: UUID):
+async def get_task_diff(task_id: UUID, db: Session = Depends(get_db)):
+    get_or_404(db, TaskModel, task_id)
     raise HTTPException(status_code=501, detail="Not implemented")

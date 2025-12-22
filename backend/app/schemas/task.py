@@ -1,8 +1,9 @@
 from datetime import datetime
 from enum import Enum
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import PlanTaskStatus
 
@@ -70,6 +71,31 @@ class Task(TaskBase):
     updated_at: datetime | None = Field(default=None, description="Last update timestamp")
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def convert_model_fields(cls, data: Any) -> Any:
+        """Convert ORM model fields to schema-compatible format."""
+        if hasattr(data, "__table__"):
+            # Convert blocked_by relationship to list of UUIDs
+            blocked_by_ids = [t.id for t in data.blocked_by] if data.blocked_by else []
+            # Convert status enum
+            status_value = data.status.value if hasattr(data.status, "value") else data.status
+            return {
+                "id": data.id,
+                "project_id": data.project_id,
+                "plan_id": data.plan_id,
+                "title": data.title,
+                "description": data.description,
+                "status": status_value,
+                "blocked_by": blocked_by_ids,
+                "branch_name": data.branch_name,
+                "worktree_path": data.worktree_path,
+                "version": data.version,
+                "created_at": data.created_at,
+                "updated_at": data.updated_at,
+            }
+        return data
 
 
 class TaskWithDetails(Task):
