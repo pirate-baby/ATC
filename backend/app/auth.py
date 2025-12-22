@@ -217,7 +217,7 @@ def get_current_user(request: Request) -> CurrentUser:
     return user
 
 
-async def validate_websocket_token(websocket: WebSocket) -> CurrentUser:
+async def validate_websocket_token(websocket: WebSocket) -> CurrentUser | None:
     """
     Validate JWT token from WebSocket query parameter.
 
@@ -228,17 +228,14 @@ async def validate_websocket_token(websocket: WebSocket) -> CurrentUser:
         websocket: The WebSocket connection.
 
     Returns:
-        CurrentUser if token is valid.
-
-    Raises:
-        WebSocketAuthError: If token is missing, invalid, or expired.
-                          Connection will be closed with 1008 (Policy Violation).
+        CurrentUser if token is valid, None if authentication fails.
+        On failure, the WebSocket connection is closed with appropriate reason.
     """
     token = websocket.query_params.get("token")
 
     if not token:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
-        raise WebSocketAuthError("Missing authentication token")
+        return None
 
     try:
         token_payload = decode_jwt_token(token)
@@ -246,12 +243,12 @@ async def validate_websocket_token(websocket: WebSocket) -> CurrentUser:
         return CurrentUser(id=user_id, token_payload=token_payload)
     except HTTPException as e:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=e.detail)
-        raise WebSocketAuthError(e.detail)
+        return None
     except ValueError:
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION, reason="Invalid user ID in token"
         )
-        raise WebSocketAuthError("Invalid user ID in token")
+        return None
 
 
 class WebSocketAuthError(Exception):

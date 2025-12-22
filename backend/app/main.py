@@ -24,7 +24,6 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# Authentication middleware - enforces JWT auth on all routes except public ones
 app.add_middleware(AuthMiddleware)
 
 app.add_middleware(

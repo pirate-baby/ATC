@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
-from app.auth import WebSocketAuthError, validate_websocket_token
+from app.auth import validate_websocket_token
 from app.schemas import (
     CodingSession,
     CodingSessionStatus,
@@ -74,9 +74,8 @@ async def session_stream(websocket: WebSocket, session_id: UUID):
     Client-to-Server messages:
     - abort: {"type": "abort"}
     """
-    try:
-        await validate_websocket_token(websocket)
-    except WebSocketAuthError:
+    current_user = await validate_websocket_token(websocket)
+    if current_user is None:
         return
 
     await websocket.accept()
