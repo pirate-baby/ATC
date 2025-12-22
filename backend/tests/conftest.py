@@ -51,12 +51,18 @@ def authed_client(client, auth_headers):
 
 
 def _create_tables_sqlite(engine):
-    """Create tables for SQLite, handling PostgreSQL-specific columns."""
+    """Create tables for SQLite testing.
+
+    NOTE: We cannot use Base.metadata.create_all() because the models use
+    PostgreSQL-specific types (JSONB, ARRAY) that SQLite doesn't support.
+    This manual schema definition is required for SQLite compatibility.
+
+    IMPORTANT: When adding new columns to models, you MUST also add them here
+    to keep the test schema in sync. This is a known trade-off for using
+    SQLite in tests instead of PostgreSQL.
+    """
     with engine.connect() as conn:
         conn.execute(text("PRAGMA foreign_keys=OFF"))
-
-        # Create tables manually in correct order to handle cycles
-        # Order: independent tables first, then dependent tables
 
         # Users (no deps)
         conn.execute(
@@ -96,10 +102,11 @@ def _create_tables_sqlite(engine):
                 """
             CREATE TABLE IF NOT EXISTS triage_connections (
                 id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
                 provider TEXT NOT NULL,
-                config TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at DATETIME
+                config TEXT,
+                last_sync_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
             )
         """
             )
@@ -122,7 +129,7 @@ def _create_tables_sqlite(engine):
             )
         )
 
-        # Project settings (deps: projects) - with TEXT instead of ARRAY
+        # Project settings (deps: projects) - TEXT instead of ARRAY for SQLite
         conn.execute(
             text(
                 """
@@ -138,7 +145,7 @@ def _create_tables_sqlite(engine):
             )
         )
 
-        # Plans (deps: projects, users)
+        # Plans (deps: projects, users, tasks)
         conn.execute(
             text(
                 """
@@ -195,28 +202,26 @@ def _create_tables_sqlite(engine):
             )
         )
 
-        # Triage items (deps: triage_connections, projects, plans)
+        # Triage items (deps: triage_connections, plans)
         conn.execute(
             text(
                 """
             CREATE TABLE IF NOT EXISTS triage_items (
                 id TEXT PRIMARY KEY,
                 connection_id TEXT NOT NULL,
-                project_id TEXT,
                 plan_id TEXT,
                 external_id TEXT NOT NULL,
                 title TEXT NOT NULL,
+                external_url TEXT,
                 description TEXT,
                 status TEXT DEFAULT 'pending' NOT NULL,
-                raw_payload TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at DATETIME
+                imported_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
             )
         """
             )
         )
 
-        # Comment threads (deps: various)
+        # Comment threads
         conn.execute(
             text(
                 """
@@ -289,6 +294,7 @@ def engine():
         cursor.close()
 
     _create_tables_sqlite(engine)
+
     yield engine
 
 
