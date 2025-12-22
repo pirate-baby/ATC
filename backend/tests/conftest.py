@@ -65,10 +65,10 @@ def _create_tables_sqlite(engine):
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 git_handle TEXT UNIQUE NOT NULL,
-                email TEXT,
+                email TEXT UNIQUE NOT NULL,
                 display_name TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at DATETIME
+                avatar_url TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
             )
         """
             )
@@ -138,7 +138,7 @@ def _create_tables_sqlite(engine):
             )
         )
 
-        # Plans (deps: projects)
+        # Plans (deps: projects, users)
         conn.execute(
             text(
                 """
@@ -150,6 +150,7 @@ def _create_tables_sqlite(engine):
                 content TEXT,
                 status TEXT DEFAULT 'backlog' NOT NULL,
                 version INTEGER DEFAULT 1 NOT NULL,
+                created_by TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 updated_at DATETIME
             )
@@ -224,11 +225,8 @@ def _create_tables_sqlite(engine):
                 target_type TEXT NOT NULL,
                 target_id TEXT NOT NULL,
                 file_path TEXT,
-                line_start INTEGER,
-                line_end INTEGER,
-                status TEXT DEFAULT 'open' NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at DATETIME
+                line_number INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
             )
         """
             )
@@ -243,6 +241,7 @@ def _create_tables_sqlite(engine):
                 thread_id TEXT NOT NULL,
                 author_id TEXT NOT NULL,
                 content TEXT NOT NULL,
+                parent_comment_id TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 updated_at DATETIME
             )

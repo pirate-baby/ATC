@@ -35,6 +35,11 @@ from app.schemas.task import (
 router = APIRouter()
 
 
+# =============================================================================
+# Private Helper Functions
+# =============================================================================
+
+
 def _detect_cycle(
     task_id: UUID,
     new_blocked_by: list[UUID],
@@ -49,12 +54,9 @@ def _detect_cycle(
     """
     if not new_blocked_by:
         return False
-
-    # If task blocks itself directly
     if task_id in new_blocked_by:
         return True
 
-    # BFS from each new blocking task to see if we can reach task_id
     visited: set[UUID] = set()
     queue: deque[UUID] = deque(new_blocked_by)
 
@@ -70,7 +72,6 @@ def _detect_cycle(
 
         for blocker in current_task.blocked_by:
             if blocker.id == task_id:
-                # Found a path back to task_id - cycle detected
                 return True
             if blocker.id not in visited:
                 queue.append(blocker.id)
@@ -78,22 +79,117 @@ def _detect_cycle(
     return False
 
 
-def _task_to_response(task: TaskModel) -> Task:
-    """Convert a Task model to a Task response schema."""
-    return Task(
-        id=task.id,
-        project_id=task.project_id,
-        plan_id=task.plan_id,
-        title=task.title,
-        description=task.description,
-        status=SchemaPlanTaskStatus(task.status.value),
-        blocked_by=[t.id for t in task.blocked_by],
-        branch_name=task.branch_name,
-        worktree_path=task.worktree_path,
-        version=task.version,
-        created_at=task.created_at,
-        updated_at=task.updated_at,
+def _validate_blocking_tasks(
+    blocking_ids: list[UUID],
+    project_id: UUID,
+    db: Session,
+) -> list[TaskModel]:
+    """Validate that all blocking tasks exist and belong to the same project."""
+    blocking_tasks: list[TaskModel] = []
+    for blocking_id in blocking_ids:
+        blocking_task = get_or_404(
+            db, TaskModel, blocking_id, detail=f"Blocking task {blocking_id} not found"
+        )
+        if blocking_task.project_id != project_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Blocking task {blocking_id} belongs to a different project",
+            )
+        blocking_tasks.append(blocking_task)
+    return blocking_tasks
+
+
+def _has_incomplete_blockers(blocking_tasks: list[TaskModel]) -> bool:
+    """Check if any blocking tasks are not yet complete."""
+    return any(
+        t.status not in (PlanTaskStatus.MERGED, PlanTaskStatus.CLOSED)
+        for t in blocking_tasks
     )
+
+
+def _apply_blocking_tasks(
+    task: TaskModel,
+    blocking_tasks: list[TaskModel],
+    db: Session,
+) -> None:
+    """Apply blocking tasks to a task, checking for cycles and updating status."""
+    if not blocking_tasks:
+        return
+
+    if _detect_cycle(task.id, [t.id for t in blocking_tasks], db):
+        raise HTTPException(
+            status_code=409,
+            detail="Adding these blocking tasks would create a circular dependency",
+        )
+
+    task.blocked_by = blocking_tasks
+    if _has_incomplete_blockers(blocking_tasks):
+        task.status = PlanTaskStatus.BLOCKED
+
+
+def _update_task_status_for_blockers(
+    task: TaskModel,
+    blocking_tasks: list[TaskModel],
+) -> None:
+    """Update task status based on presence and completion of blockers."""
+    if blocking_tasks:
+        if _has_incomplete_blockers(blocking_tasks) and task.status == PlanTaskStatus.BACKLOG:
+            task.status = PlanTaskStatus.BLOCKED
+    elif task.status == PlanTaskStatus.BLOCKED:
+        task.status = PlanTaskStatus.BACKLOG
+
+
+def _build_plan_summary(task: TaskModel) -> PlanSummary | None:
+    """Build a plan summary from a task's parent plan."""
+    if not task.plan:
+        return None
+    return PlanSummary(
+        id=task.plan.id,
+        title=task.plan.title,
+        status=SchemaPlanTaskStatus(task.plan.status.value),
+    )
+
+
+def _build_blocking_tasks_summaries(task: TaskModel) -> list[TaskSummary]:
+    """Build summaries of tasks that block this task."""
+    return [
+        TaskSummary(id=t.id, title=t.title, status=SchemaPlanTaskStatus(t.status.value))
+        for t in task.blocked_by
+    ]
+
+
+def _build_reviews_summaries(task: TaskModel) -> list[ReviewSummary]:
+    """Build summaries of reviews on this task."""
+    return [
+        ReviewSummary(
+            id=r.id,
+            reviewer_id=r.reviewer_id,
+            decision=r.decision.value,
+            created_at=r.created_at,
+        )
+        for r in task.reviews
+    ]
+
+
+def _build_threads_summaries(task: TaskModel) -> list[ThreadSummary]:
+    """Build summaries of comment threads on this task."""
+    return [
+        ThreadSummary(id=t.id, status="open", comment_count=len(t.comments))
+        for t in task.comment_threads
+    ]
+
+
+def _build_active_session(task: TaskModel) -> SessionSummary | None:
+    """Build active session summary if task has an active session."""
+    if not task.session_started_at or task.session_ended_at:
+        return None
+    return SessionSummary(
+        id=task.id,
+        status="active",
+        started_at=task.session_started_at,
+    )
+
+
 
 
 @router.get(
@@ -125,7 +221,7 @@ async def list_project_tasks(
     pages = (total + limit - 1) // limit if total > 0 else 0
 
     return PaginatedResponse[Task](
-        items=[_task_to_response(t) for t in items],
+        items=[Task.model_validate(t) for t in items],
         total=total,
         page=page,
         limit=limit,
@@ -153,24 +249,11 @@ async def create_task(
 ):
     get_or_404(db, ProjectModel, project_id)
 
-    # Validate plan_id if provided
     if task.plan_id is not None:
         get_or_404(db, PlanModel, task.plan_id, detail="Plan not found")
 
-    # Validate blocked_by tasks exist and belong to same project
-    blocking_tasks: list[TaskModel] = []
-    for blocking_id in task.blocked_by:
-        blocking_task = get_or_404(
-            db, TaskModel, blocking_id, detail=f"Blocking task {blocking_id} not found"
-        )
-        if blocking_task.project_id != project_id:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Blocking task {blocking_id} belongs to a different project",
-            )
-        blocking_tasks.append(blocking_task)
+    blocking_tasks = _validate_blocking_tasks(task.blocked_by, project_id, db)
 
-    # Create the task first (without blocked_by to avoid issues)
     new_task = TaskModel(
         project_id=project_id,
         plan_id=task.plan_id,
@@ -180,27 +263,10 @@ async def create_task(
     db.add(new_task)
     db.flush()
 
-    # Now check for cycles if there are blocking tasks
-    if blocking_tasks:
-        # Check if adding these blockers would create a cycle
-        if _detect_cycle(new_task.id, [t.id for t in blocking_tasks], db):
-            raise HTTPException(
-                status_code=409,
-                detail="Adding these blocking tasks would create a circular dependency",
-            )
-        new_task.blocked_by = blocking_tasks
-
-        # Update status to blocked if there are incomplete blockers
-        incomplete_blockers = [
-            t
-            for t in blocking_tasks
-            if t.status not in (PlanTaskStatus.MERGED, PlanTaskStatus.CLOSED)
-        ]
-        if incomplete_blockers:
-            new_task.status = PlanTaskStatus.BLOCKED
+    _apply_blocking_tasks(new_task, blocking_tasks, db)
 
     db.flush()
-    return _task_to_response(new_task)
+    return Task.model_validate(new_task)
 
 
 @router.get(
@@ -216,47 +282,6 @@ async def create_task(
 async def get_task(task_id: UUID, db: Session = Depends(get_db)):
     task = get_or_404(db, TaskModel, task_id)
 
-    # Build plan summary
-    plan_summary = None
-    if task.plan:
-        plan_summary = PlanSummary(
-            id=task.plan.id,
-            title=task.plan.title,
-            status=SchemaPlanTaskStatus(task.plan.status.value),
-        )
-
-    # Build blocking tasks summaries
-    blocking_tasks = [
-        TaskSummary(id=t.id, title=t.title, status=SchemaPlanTaskStatus(t.status.value))
-        for t in task.blocked_by
-    ]
-
-    # Build reviews summaries
-    reviews = [
-        ReviewSummary(
-            id=r.id,
-            reviewer_id=r.reviewer_id,
-            decision=r.decision.value,
-            created_at=r.created_at,
-        )
-        for r in task.reviews
-    ]
-
-    # Build threads summaries
-    threads = [
-        ThreadSummary(id=t.id, status=t.status.value, comment_count=len(t.comments))
-        for t in task.comment_threads
-    ]
-
-    # Get active session info from task fields
-    active_session = None
-    if task.session_started_at and not task.session_ended_at:
-        active_session = SessionSummary(
-            id=task.id,  # Use task ID as session ID since merged
-            status="active",
-            started_at=task.session_started_at,
-        )
-
     return TaskWithDetails(
         id=task.id,
         project_id=task.project_id,
@@ -270,11 +295,11 @@ async def get_task(task_id: UUID, db: Session = Depends(get_db)):
         version=task.version,
         created_at=task.created_at,
         updated_at=task.updated_at,
-        plan=plan_summary,
-        blocking_tasks=blocking_tasks,
-        reviews=reviews,
-        threads=threads,
-        active_session=active_session,
+        plan=_build_plan_summary(task),
+        blocking_tasks=_build_blocking_tasks_summaries(task),
+        reviews=_build_reviews_summaries(task),
+        threads=_build_threads_summaries(task),
+        active_session=_build_active_session(task),
     )
 
 
@@ -303,7 +328,7 @@ async def update_task(
         db_task.version += 1
 
     db.flush()
-    return _task_to_response(db_task)
+    return Task.model_validate(db_task)
 
 
 @router.delete(
@@ -334,10 +359,7 @@ async def delete_task(task_id: UUID, db: Session = Depends(get_db)):
 )
 async def get_blocking_tasks(task_id: UUID, db: Session = Depends(get_db)):
     task = get_or_404(db, TaskModel, task_id)
-    return [
-        TaskSummary(id=t.id, title=t.title, status=SchemaPlanTaskStatus(t.status.value))
-        for t in task.blocked_by
-    ]
+    return _build_blocking_tasks_summaries(task)
 
 
 @router.put(
@@ -359,46 +381,21 @@ async def set_blocking_tasks(
 ):
     task = get_or_404(db, TaskModel, task_id)
 
-    # Validate all blocking tasks exist and belong to same project
-    blocking_tasks: list[TaskModel] = []
-    for blocking_id in blocking.blocked_by:
-        blocking_task = get_or_404(
-            db, TaskModel, blocking_id, detail=f"Blocking task {blocking_id} not found"
-        )
-        if blocking_task.project_id != task.project_id:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Blocking task {blocking_id} belongs to a different project",
-            )
-        blocking_tasks.append(blocking_task)
+    blocking_tasks = _validate_blocking_tasks(blocking.blocked_by, task.project_id, db)
 
-    # Check for circular dependencies
     if _detect_cycle(task_id, blocking.blocked_by, db):
         raise HTTPException(
             status_code=409,
             detail="Setting these blocking tasks would create a circular dependency",
         )
 
-    # Update the blocked_by relationship
     task.blocked_by = blocking_tasks
     task.version += 1
 
-    # Update status based on blockers
-    if blocking_tasks:
-        incomplete_blockers = [
-            t
-            for t in blocking_tasks
-            if t.status not in (PlanTaskStatus.MERGED, PlanTaskStatus.CLOSED)
-        ]
-        if incomplete_blockers and task.status == PlanTaskStatus.BACKLOG:
-            task.status = PlanTaskStatus.BLOCKED
-    else:
-        # No blockers - if task was blocked, move back to backlog
-        if task.status == PlanTaskStatus.BLOCKED:
-            task.status = PlanTaskStatus.BACKLOG
+    _update_task_status_for_blockers(task, blocking_tasks)
 
     db.flush()
-    return _task_to_response(task)
+    return Task.model_validate(task)
 
 
 @router.get(
@@ -487,31 +484,31 @@ async def approve_task(task_id: UUID, db: Session = Depends(get_db)):
     task.version += 1
     db.flush()
 
-    # Check if any tasks were blocked by this task and update them
     _update_blocked_tasks(task, db)
 
-    return _task_to_response(task)
+    return Task.model_validate(task)
 
 
-def _update_blocked_tasks(completed_task: TaskModel, db: Session):
+def _update_blocked_tasks(completed_task: TaskModel, db: Session) -> None:
     """
-    When a task reaches a terminal state (MERGED/CLOSED), check if any
+    Update tasks that were blocked by the completed task.
+
+    When a task reaches a terminal state (MERGED/CLOSED/CICD/APPROVED), check if any
     tasks that were blocked by it can now be unblocked.
     """
-    if completed_task.status not in (
+    terminal_states = (
         PlanTaskStatus.MERGED,
         PlanTaskStatus.CLOSED,
         PlanTaskStatus.CICD,
         PlanTaskStatus.APPROVED,
-    ):
+    )
+    if completed_task.status not in terminal_states:
         return
 
-    # Find tasks that this task blocks
     for blocked_task in completed_task.blocks:
         if blocked_task.status != PlanTaskStatus.BLOCKED:
             continue
 
-        # Check if all blockers are now complete
         all_blockers_complete = all(
             blocker.status in (PlanTaskStatus.MERGED, PlanTaskStatus.CLOSED)
             for blocker in blocked_task.blocked_by
@@ -558,8 +555,5 @@ async def spawn_plan_from_task(task_id: UUID, db: Session = Depends(get_db)):
     },
 )
 async def get_task_diff(task_id: UUID, db: Session = Depends(get_db)):
-    # Verify task exists
     get_or_404(db, TaskModel, task_id)
-
-    # Stub implementation - returns 501 as per requirements
     raise HTTPException(status_code=501, detail="Not implemented")
