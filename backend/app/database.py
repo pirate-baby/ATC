@@ -1,6 +1,9 @@
 from collections.abc import Generator
+from typing import TypeVar
+from uuid import UUID
 
-from sqlalchemy import create_engine
+from fastapi import HTTPException
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -8,6 +11,8 @@ from app.config import settings
 engine = create_engine(settings.database_url, echo=settings.environment == "development")
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+T = TypeVar("T")
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -20,3 +25,10 @@ def get_db() -> Generator[Session, None, None]:
         raise
     finally:
         db.close()
+
+
+def get_or_404(db: Session, model: type[T], id: UUID, detail: str | None = None) -> T:
+    obj = db.scalar(select(model).where(model.id == id))  # type: ignore[attr-defined]
+    if not obj:
+        raise HTTPException(status_code=404, detail=detail or f"{model.__name__} not found")
+    return obj

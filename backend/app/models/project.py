@@ -1,7 +1,8 @@
 from uuid import UUID
 
 from sqlalchemy import Boolean, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -14,7 +15,9 @@ class Project(Base, UUIDMixin, TimestampMixin):
     git_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     main_branch: Mapped[str] = mapped_column(String(255), default="main", nullable=False)
     triage_connection_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("triage_connections.id", ondelete="SET NULL"), nullable=True
+        PG_UUID(as_uuid=True),
+        ForeignKey("triage_connections.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     # Relationships

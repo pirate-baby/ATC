@@ -48,8 +48,12 @@ class Task(Base, UUIDMixin, TimestampMixin):
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     # Coding session fields (merged from CodingSession)
-    session_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    session_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    session_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    session_ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     session_output_log: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
