@@ -1,4 +1,5 @@
 from app.models.base import Base
+from app.models.coding_session import CodingSession
 from app.models.comment import Comment, CommentThread
 from app.models.enums import (
     CommentThreadTargetType,
@@ -27,6 +28,7 @@ __all__ = [
     "ReviewTargetType",
     "ReviewDecision",
     # Models
+    "CodingSession",
     "User",
     "Project",
     "ProjectSettings",

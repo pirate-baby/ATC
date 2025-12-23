@@ -213,24 +213,17 @@ class TestWebSocketAuth:
         """Test that WebSocket connection with invalid token is rejected."""
         session_id = str(uuid4())
         with pytest.raises(Exception):
-            with client.websocket_connect(
-                f"/api/v1/ws/sessions/{session_id}/stream?token=invalid"
-            ):
+            with client.websocket_connect(f"/api/v1/ws/sessions/{session_id}/stream?token=invalid"):
                 pass
 
-    def test_websocket_with_valid_token(self, client):
-        """Test that WebSocket connection with valid token is accepted."""
+    def test_websocket_with_valid_token_but_no_session(self, client):
+        """Test that WebSocket with valid token but non-existent session is rejected."""
         session_id = str(uuid4())
         token = create_test_token()
-        # This should connect successfully
-        with client.websocket_connect(
-            f"/api/v1/ws/sessions/{session_id}/stream?token={token}"
-        ) as websocket:
-            # Send abort to close cleanly
-            websocket.send_json({"type": "abort"})
-            data = websocket.receive_json()
-            assert data["type"] == "status"
-            assert data["status"] == "aborted"
+        # Valid token but session doesn't exist - should close with 4004
+        with pytest.raises(Exception):
+            with client.websocket_connect(f"/api/v1/ws/sessions/{session_id}/stream?token={token}"):
+                pass
 
 
 class TestTokenPayloadModel:
