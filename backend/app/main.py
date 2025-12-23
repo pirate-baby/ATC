@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import AuthMiddleware
 from app.routers import (
+    auth_router,
     comments_router,
     events_router,
     hats_router,
@@ -35,6 +36,7 @@ app.add_middleware(
 )
 
 ROUTERS = [
+    (auth_router, "Authentication"),
     (projects_router, "Projects"),
     (plans_router, "Plans"),
     (tasks_router, "Tasks"),

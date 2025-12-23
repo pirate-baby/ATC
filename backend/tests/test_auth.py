@@ -1,15 +1,18 @@
-"""Tests for authentication middleware."""
+"""Tests for authentication middleware and OAuth endpoints."""
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from jose import jwt
+from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, TokenPayload, decode_jwt_token
 from app.config import settings
+from app.models.user import User
 
 
 def create_test_token(
@@ -260,3 +263,336 @@ class TestCurrentUserModel:
         current_user = CurrentUser(id=user_id, token_payload=payload)
         assert current_user.id == user_id
         assert current_user.token_payload.sub == str(user_id)
+
+
+class TestGitHubAuthEndpoint:
+    """Tests for GET /api/v1/auth/github."""
+
+    @pytest.fixture
+    def app(self):
+        """Create a test FastAPI app."""
+        from app.main import app
+
+        return app
+
+    @pytest.fixture
+    def client(self, app):
+        """Create a test client."""
+        return TestClient(app)
+
+    def test_github_auth_not_configured(self, client):
+        """Returns 503 when GitHub OAuth is not configured."""
+        with patch("app.routers.auth.settings") as mock_settings:
+            mock_settings.github_client_id = None
+            mock_settings.github_client_secret = None
+
+            response = client.get("/api/v1/auth/github")
+
+            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+            assert "not configured" in response.json()["detail"]
+
+    def test_github_auth_returns_url(self, client):
+        """Returns OAuth authorization URL with state."""
+        with patch("app.routers.auth.settings") as mock_settings:
+            mock_settings.github_client_id = "test-client-id"
+            mock_settings.github_client_secret = "test-client-secret"
+            mock_settings.github_redirect_uri = "http://localhost:3000/callback"
+
+            response = client.get("/api/v1/auth/github")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert "url" in data
+            assert "state" in data
+            assert "github.com/login/oauth/authorize" in data["url"]
+            assert "client_id=test-client-id" in data["url"]
+            assert "redirect_uri=" in data["url"]
+            assert len(data["state"]) > 20
+
+    def test_github_auth_with_custom_redirect_uri(self, client):
+        """Accepts custom redirect_uri parameter."""
+        with patch("app.routers.auth.settings") as mock_settings:
+            mock_settings.github_client_id = "test-client-id"
+            mock_settings.github_client_secret = "test-client-secret"
+            mock_settings.github_redirect_uri = None
+
+            response = client.get(
+                "/api/v1/auth/github",
+                params={"redirect_uri": "http://custom.com/callback"},
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert "custom.com" in data["url"]
+
+    def test_github_auth_no_redirect_uri(self, client):
+        """Returns 400 when no redirect URI is configured or provided."""
+        with patch("app.routers.auth.settings") as mock_settings:
+            mock_settings.github_client_id = "test-client-id"
+            mock_settings.github_client_secret = "test-client-secret"
+            mock_settings.github_redirect_uri = None
+
+            response = client.get("/api/v1/auth/github")
+
+            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            assert "redirect" in response.json()["detail"].lower()
+
+
+class TestGitHubCallbackEndpoint:
+    """Tests for GET /api/v1/auth/github/callback."""
+
+    @pytest.fixture
+    def app(self):
+        """Create a test FastAPI app."""
+        from app.main import app
+
+        return app
+
+    @pytest.fixture
+    def client(self, app):
+        """Create a test client."""
+        return TestClient(app)
+
+    def test_callback_not_configured(self, client):
+        """Returns 503 when GitHub OAuth is not configured."""
+        with patch("app.routers.auth.settings") as mock_settings:
+            mock_settings.github_client_id = None
+            mock_settings.github_client_secret = None
+
+            response = client.get(
+                "/api/v1/auth/github/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+
+            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    def test_callback_missing_code(self, client):
+        """Returns 422 when code parameter is missing."""
+        response = client.get(
+            "/api/v1/auth/github/callback",
+            params={"state": "test-state"},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_callback_missing_state(self, client):
+        """Returns 422 when state parameter is missing."""
+        response = client.get(
+            "/api/v1/auth/github/callback",
+            params={"code": "test-code"},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_callback_token_exchange_failure(self, client):
+        """Returns 401 when token exchange fails."""
+        from unittest.mock import MagicMock
+
+        mock_token_response = MagicMock()
+        mock_token_response.status_code = 401
+        mock_token_response.json.return_value = {"error": "bad_verification_code"}
+
+        with (
+            patch("app.routers.auth.settings") as mock_settings,
+            patch("app.routers.auth.httpx.AsyncClient") as mock_client,
+        ):
+            mock_settings.github_client_id = "test-client-id"
+            mock_settings.github_client_secret = "test-client-secret"
+            mock_settings.github_redirect_uri = "http://localhost:3000/callback"
+
+            mock_async_client = AsyncMock()
+            mock_async_client.post.return_value = mock_token_response
+            mock_async_client.__aenter__.return_value = mock_async_client
+            mock_async_client.__aexit__.return_value = None
+            mock_client.return_value = mock_async_client
+
+            response = client.get(
+                "/api/v1/auth/github/callback",
+                params={"code": "bad-code", "state": "test-state"},
+            )
+
+            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_callback_user_fetch_failure(self, client):
+        """Returns 401 when fetching GitHub user profile fails."""
+        from unittest.mock import MagicMock
+
+        mock_token_response = MagicMock()
+        mock_token_response.status_code = 200
+        mock_token_response.json.return_value = {"access_token": "gho_test_token"}
+
+        mock_user_response = MagicMock()
+        mock_user_response.status_code = 401
+
+        with (
+            patch("app.routers.auth.settings") as mock_settings,
+            patch("app.routers.auth.httpx.AsyncClient") as mock_client,
+        ):
+            mock_settings.github_client_id = "test-client-id"
+            mock_settings.github_client_secret = "test-client-secret"
+            mock_settings.github_redirect_uri = "http://localhost:3000/callback"
+
+            mock_async_client = AsyncMock()
+            mock_async_client.post.return_value = mock_token_response
+            mock_async_client.get.return_value = mock_user_response
+            mock_async_client.__aenter__.return_value = mock_async_client
+            mock_async_client.__aexit__.return_value = None
+            mock_client.return_value = mock_async_client
+
+            response = client.get(
+                "/api/v1/auth/github/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+
+            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestGitHubCallbackWithDB:
+    """Tests for GitHub callback with database operations."""
+
+    def test_callback_creates_new_user(self, client: TestClient, session: Session):
+        """Creates a new user when GitHub login doesn't exist."""
+        from unittest.mock import MagicMock
+
+        mock_token_response = MagicMock()
+        mock_token_response.status_code = 200
+        mock_token_response.json.return_value = {"access_token": "gho_test_token"}
+
+        mock_user_response = MagicMock()
+        mock_user_response.status_code = 200
+        mock_user_response.json.return_value = {
+            "id": 12345,
+            "login": "newgithubuser",
+            "email": "new@github.com",
+            "name": "New GitHub User",
+            "avatar_url": "https://github.com/avatar.png",
+        }
+
+        with (
+            patch("app.routers.auth.settings") as mock_settings,
+            patch("app.routers.auth.httpx.AsyncClient") as mock_client,
+        ):
+            mock_settings.github_client_id = "test-client-id"
+            mock_settings.github_client_secret = "test-client-secret"
+            mock_settings.github_redirect_uri = "http://localhost:3000/callback"
+            mock_settings.jwt_secret_key = settings.jwt_secret_key
+            mock_settings.jwt_algorithm = settings.jwt_algorithm
+            mock_settings.jwt_access_token_expire_minutes = 30
+            mock_settings.jwt_issuer = None
+            mock_settings.jwt_audience = None
+
+            mock_async_client = AsyncMock()
+            mock_async_client.post.return_value = mock_token_response
+            mock_async_client.get.return_value = mock_user_response
+            mock_async_client.__aenter__.return_value = mock_async_client
+            mock_async_client.__aexit__.return_value = None
+            mock_client.return_value = mock_async_client
+
+            response = client.get(
+                "/api/v1/auth/github/callback",
+                params={
+                    "code": "test-code",
+                    "state": "test-state",
+                    "redirect_uri": "http://localhost:3000/callback",
+                },
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert "access_token" in data
+            assert data["token_type"] == "bearer"
+            assert data["expires_in"] == 30 * 60
+
+            user = session.query(User).filter(User.git_handle == "newgithubuser").first()
+            assert user is not None
+            assert user.email == "new@github.com"
+            assert user.display_name == "New GitHub User"
+            assert user.avatar_url == "https://github.com/avatar.png"
+
+    def test_callback_updates_existing_user(self, client: TestClient, session: Session):
+        """Updates existing user when GitHub login already exists."""
+        from unittest.mock import MagicMock
+
+        existing_user = User(
+            git_handle="existinguser",
+            email="old@email.com",
+            display_name="Old Name",
+            avatar_url="https://old-avatar.png",
+        )
+        session.add(existing_user)
+        session.flush()
+        user_id = existing_user.id
+
+        mock_token_response = MagicMock()
+        mock_token_response.status_code = 200
+        mock_token_response.json.return_value = {"access_token": "gho_test_token"}
+
+        mock_user_response = MagicMock()
+        mock_user_response.status_code = 200
+        mock_user_response.json.return_value = {
+            "id": 12345,
+            "login": "existinguser",
+            "email": "new@email.com",
+            "name": "New Name",
+            "avatar_url": "https://new-avatar.png",
+        }
+
+        with (
+            patch("app.routers.auth.settings") as mock_settings,
+            patch("app.routers.auth.httpx.AsyncClient") as mock_client,
+        ):
+            mock_settings.github_client_id = "test-client-id"
+            mock_settings.github_client_secret = "test-client-secret"
+            mock_settings.github_redirect_uri = "http://localhost:3000/callback"
+            mock_settings.jwt_secret_key = settings.jwt_secret_key
+            mock_settings.jwt_algorithm = settings.jwt_algorithm
+            mock_settings.jwt_access_token_expire_minutes = 30
+            mock_settings.jwt_issuer = None
+            mock_settings.jwt_audience = None
+
+            mock_async_client = AsyncMock()
+            mock_async_client.post.return_value = mock_token_response
+            mock_async_client.get.return_value = mock_user_response
+            mock_async_client.__aenter__.return_value = mock_async_client
+            mock_async_client.__aexit__.return_value = None
+            mock_client.return_value = mock_async_client
+
+            response = client.get(
+                "/api/v1/auth/github/callback",
+                params={
+                    "code": "test-code",
+                    "state": "test-state",
+                    "redirect_uri": "http://localhost:3000/callback",
+                },
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+
+            session.refresh(existing_user)
+            assert existing_user.id == user_id
+            assert existing_user.email == "new@email.com"
+            assert existing_user.display_name == "New Name"
+            assert existing_user.avatar_url == "https://new-avatar.png"
+
+
+class TestLogoutEndpoint:
+    """Tests for POST /api/v1/auth/logout."""
+
+    @pytest.fixture
+    def app(self):
+        """Create a test FastAPI app."""
+        from app.main import app
+
+        return app
+
+    @pytest.fixture
+    def client(self, app):
+        """Create a test client."""
+        return TestClient(app)
+
+    def test_logout_returns_204(self, client):
+        """Logout endpoint returns 204 No Content."""
+        response = client.post("/api/v1/auth/logout")
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.content == b""
