@@ -1,9 +1,11 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db, get_or_404
+from app.models.enums import ProcessingStatus
 from app.models.plan import Plan as PlanModel
 from app.models.project import Project as ProjectModel
 from app.models.review import Review as ReviewModel
@@ -11,6 +13,8 @@ from app.schemas import (
     PaginatedResponse,
     Plan,
     PlanCreate,
+    PlanGenerateRequest,
+    PlanGenerationStatus,
     PlanTaskStatus,
     PlanUpdate,
     PlanWithDetails,
@@ -20,6 +24,14 @@ from app.schemas import (
 )
 from app.schemas.plan import ReviewSummary, TaskSummary, ThreadSummary
 from app.schemas.review import ReviewTargetType
+from app.services.claude import (
+    ClaudeGenerationError,
+    ClaudeNotConfiguredError,
+    claude_service,
+)
+from app.services.task_queue import is_task_running, submit_task
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -107,6 +119,8 @@ async def get_plan(plan_id: UUID, db: Session = Depends(get_db)):
         status=plan.status,
         parent_task_id=plan.parent_task_id,
         version=plan.version,
+        processing_status=plan.processing_status,
+        processing_error=plan.processing_error,
         created_by=plan.created_by,
         created_at=plan.created_at,
         updated_at=plan.updated_at,
@@ -203,3 +217,173 @@ async def approve_plan(plan_id: UUID, db: Session = Depends(get_db)):
     plan.status = PlanTaskStatus.APPROVED
     db.flush()
     return plan
+
+
+async def _run_plan_generation(
+    plan_id: UUID,
+    title: str,
+    context: str | None,
+    project_context: str | None,
+    database_url: str,
+) -> None:
+    """Background task to generate plan content.
+
+    This runs in the background and updates the plan directly in the database.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    # Create a new database session for the background task
+    engine = create_engine(database_url)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+    db = SessionLocal()
+    try:
+        # Get the plan
+        plan = db.query(PlanModel).filter(PlanModel.id == plan_id).first()
+        if not plan:
+            logger.error(f"Plan {plan_id} not found during generation")
+            return
+
+        try:
+            # Generate the content
+            result = await claude_service.generate_plan(
+                plan_id=plan_id,
+                title=title,
+                context=context,
+                project_context=project_context,
+            )
+
+            # Update the plan with generated content
+            plan.content = result.content
+            plan.processing_status = ProcessingStatus.COMPLETED
+            plan.processing_error = None
+            db.commit()
+
+            logger.info(f"Plan generation completed for plan_id={plan_id}")
+
+        except (ClaudeNotConfiguredError, ClaudeGenerationError) as e:
+            logger.error(f"Plan generation failed for plan_id={plan_id}: {e}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = str(e)
+            db.commit()
+
+        except Exception as e:
+            logger.exception(f"Unexpected error during plan generation for plan_id={plan_id}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = f"Unexpected error: {e}"
+            db.commit()
+
+    finally:
+        db.close()
+        engine.dispose()
+
+
+@router.post(
+    "/plans/{plan_id}/generate",
+    response_model=PlanGenerationStatus,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Generate plan content",
+    description="Submit a plan for AI-powered content generation using Claude.",
+    responses={
+        202: {"description": "Generation started"},
+        409: {"description": "Generation already in progress"},
+        503: {"description": "Claude service not configured"},
+    },
+)
+async def generate_plan_content(
+    plan_id: UUID,
+    request: PlanGenerateRequest | None = None,
+    db: Session = Depends(get_db),
+):
+    """Start AI-powered plan content generation.
+
+    This endpoint initiates a background task to generate plan content using Claude.
+    Poll the /plans/{plan_id}/generation-status endpoint to check progress.
+    """
+    plan = get_or_404(db, PlanModel, plan_id)
+
+    # Check if Claude service is configured
+    if not claude_service.is_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Claude service not configured. Set ANTHROPIC_API_KEY environment variable.",
+        )
+
+    # Check if generation is already in progress
+    if plan.processing_status == ProcessingStatus.GENERATING:
+        raise HTTPException(
+            status_code=409,
+            detail="Plan content generation already in progress",
+        )
+
+    # Check if there's an active task
+    if is_task_running(plan_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Plan content generation already in progress",
+        )
+
+    # Set status to generating
+    plan.processing_status = ProcessingStatus.GENERATING
+    plan.processing_error = None
+    db.flush()
+
+    # Build project context
+    project = plan.project
+    project_context = f"Project: {project.name}"
+    if project.description:
+        project_context += f"\nDescription: {project.description}"
+
+    # Get context from request
+    context = request.context if request else None
+
+    # Get database URL for background task
+    from app.config import settings
+
+    # Start background generation task
+    submit_task(
+        plan_id,
+        _run_plan_generation(
+            plan_id=plan_id,
+            title=plan.title,
+            context=context,
+            project_context=project_context,
+            database_url=settings.database_url,
+        ),
+    )
+
+    return PlanGenerationStatus(
+        plan_id=plan.id,
+        processing_status=plan.processing_status,
+        processing_error=plan.processing_error,
+        content=plan.content,
+    )
+
+
+@router.get(
+    "/plans/{plan_id}/generation-status",
+    response_model=PlanGenerationStatus,
+    summary="Get generation status",
+    description="Check the status of plan content generation.",
+    responses={
+        200: {"description": "Current generation status"},
+        404: {"description": "Plan not found"},
+    },
+)
+async def get_plan_generation_status(
+    plan_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Get the current status of plan content generation.
+
+    Poll this endpoint to track the progress of AI-powered plan generation.
+    """
+    plan = get_or_404(db, PlanModel, plan_id)
+
+    return PlanGenerationStatus(
+        plan_id=plan.id,
+        processing_status=plan.processing_status,
+        processing_error=plan.processing_error,
+        content=plan.content,
+    )

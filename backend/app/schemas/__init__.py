@@ -9,7 +9,15 @@ from app.schemas.comment import (
 )
 from app.schemas.common import PlanTaskStatus
 from app.schemas.hat import HAT, HATCreate, HATUpdate
-from app.schemas.plan import Plan, PlanCreate, PlanUpdate, PlanWithDetails
+from app.schemas.plan import (
+    Plan,
+    PlanCreate,
+    PlanGenerateRequest,
+    PlanGenerationStatus,
+    PlanUpdate,
+    PlanWithDetails,
+    ProcessingStatus,
+)
 from app.schemas.project import (
     Project,
     ProjectCreate,
@@ -61,6 +69,9 @@ __all__ = [
     "PlanCreate",
     "PlanUpdate",
     "PlanWithDetails",
+    "PlanGenerateRequest",
+    "PlanGenerationStatus",
+    "ProcessingStatus",
     "Task",
     "TaskCreate",
     "TaskUpdate",

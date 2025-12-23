@@ -23,5 +23,8 @@ class Settings(BaseSettings):
     # Git worktree settings
     worktrees_base_path: Path = Path("/var/lib/atc/worktrees")
 
+    # Anthropic API settings
+    anthropic_api_key: str | None = None
+
 
 settings = Settings()

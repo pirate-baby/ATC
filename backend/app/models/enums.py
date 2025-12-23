@@ -45,3 +45,12 @@ class ReviewTargetType(str, Enum):
 class ReviewDecision(str, Enum):
     APPROVED = "approved"
     REQUEST_CHANGES = "request_changes"
+
+
+class ProcessingStatus(str, Enum):
+    """Status of AI-powered content generation."""
+
+    PENDING = "pending"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"

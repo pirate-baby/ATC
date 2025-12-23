@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.models.enums import ProcessingStatus
 from app.schemas.common import PlanTaskStatus
 
 
@@ -30,6 +31,12 @@ class Plan(PlanBase):
         default=None, description="Task ID if this plan was spawned by a complex task"
     )
     version: int = Field(default=1, description="Plan version number")
+    processing_status: ProcessingStatus | None = Field(
+        default=None, description="Status of AI content generation"
+    )
+    processing_error: str | None = Field(
+        default=None, description="Error message if generation failed"
+    )
     created_by: UUID | None = Field(default=None, description="User or system that created")
     created_at: datetime = Field(description="Creation timestamp")
     updated_at: datetime | None = Field(default=None, description="Last update timestamp")
@@ -62,6 +69,30 @@ class ThreadSummary(BaseModel):
     id: UUID
     status: str
     comment_count: int
+
+
+class PlanGenerateRequest(BaseModel):
+    """Request to generate plan content using Claude."""
+
+    context: str | None = Field(
+        default=None,
+        description="Additional context to provide to Claude for plan generation",
+    )
+
+
+class PlanGenerationStatus(BaseModel):
+    """Response showing the current generation status of a plan."""
+
+    plan_id: UUID = Field(description="Plan ID")
+    processing_status: ProcessingStatus | None = Field(
+        description="Current processing status"
+    )
+    processing_error: str | None = Field(
+        default=None, description="Error message if generation failed"
+    )
+    content: str | None = Field(
+        default=None, description="Generated content if completed"
+    )
 
 
 PlanWithDetails.model_rebuild()

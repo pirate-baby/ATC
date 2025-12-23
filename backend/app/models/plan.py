@@ -5,7 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
-from app.models.enums import PlanTaskStatus
+from app.models.enums import PlanTaskStatus, ProcessingStatus
 
 
 class Plan(Base, UUIDMixin, TimestampMixin):
@@ -25,6 +25,12 @@ class Plan(Base, UUIDMixin, TimestampMixin):
         PG_UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
     )
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    processing_status: Mapped[ProcessingStatus | None] = mapped_column(
+        Enum(ProcessingStatus, name="processing_status", native_enum=True),
+        default=None,
+        nullable=True,
+    )
+    processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
