@@ -24,7 +24,6 @@ from app.database import get_db
 from app.main import app
 from app.models import Base, Plan, PlanTaskStatus, Project, ProjectSettings, Task, User
 
-
 # ============================================================================
 # Auth Fixtures
 # ============================================================================
@@ -72,9 +71,12 @@ def get_test_database_url() -> str:
         "DATABASE_URL",
         "postgresql+psycopg2://atc:atc_dev@localhost:5432/atc_test",
     )
-    # Replace the main database with test database
-    if "/atc" in default_url and "/atc_test" not in default_url:
-        default_url = default_url.replace("/atc", "/atc_test")
+    # Replace the main database name with test database name
+    # Only replace the database name at the end of the URL, not usernames
+    if default_url.endswith("/atc"):
+        default_url = default_url[:-4] + "/atc_test"
+    elif "/atc?" in default_url:
+        default_url = default_url.replace("/atc?", "/atc_test?")
     return default_url
 
 

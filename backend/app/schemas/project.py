@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
 
 
 class ProjectSettings(BaseModel):
@@ -17,6 +18,8 @@ class ProjectSettings(BaseModel):
     assigned_hats: list[UUID] = Field(
         default_factory=list, description="HAT IDs assigned to this project"
     )
+
+    model_config = {"from_attributes": True}
 
 
 class ProjectSettingsUpdate(BaseModel):
@@ -34,9 +37,16 @@ class ProjectSettingsUpdate(BaseModel):
     )
 
 
+# Custom URL type that allows http, https, file, git, and ssh schemes for git repositories
+GitUrl = Annotated[
+    AnyUrl,
+    UrlConstraints(allowed_schemes=["http", "https", "file", "git", "ssh"]),
+]
+
+
 class ProjectBase(BaseModel):
     name: str = Field(description="Human-readable project name")
-    git_url: HttpUrl = Field(description="Git repository URL")
+    git_url: GitUrl = Field(description="Git repository URL")
     main_branch: str = Field(default="main", description="Primary branch name")
 
 
@@ -51,7 +61,7 @@ class ProjectCreate(ProjectBase):
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, description="Human-readable project name")
-    git_url: HttpUrl | None = Field(default=None, description="Git repository URL")
+    git_url: GitUrl | None = Field(default=None, description="Git repository URL")
     main_branch: str | None = Field(default=None, description="Primary branch name")
     triage_connection_id: UUID | None = Field(
         default=None, description="Associated triage connection ID"
