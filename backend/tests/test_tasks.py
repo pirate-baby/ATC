@@ -549,9 +549,11 @@ class TestSpawnPlan:
 
 
 class TestGetTaskDiff:
-    def test_get_diff_stub(self, authed_client: TestClient, task: Task):
+    def test_get_diff_no_worktree(self, authed_client: TestClient, task: Task):
+        """Task without worktree returns 404."""
         response = authed_client.get(f"/api/v1/tasks/{task.id}/diff")
-        assert response.status_code == 501
+        assert response.status_code == 404
+        assert "worktree" in response.json()["detail"].lower()
 
     def test_get_diff_task_not_found(self, authed_client: TestClient):
         fake_id = uuid.uuid4()

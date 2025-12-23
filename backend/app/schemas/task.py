@@ -15,18 +15,40 @@ class FileStatus(str, Enum):
     RENAMED = "renamed"
 
 
+class DiffLineType(str, Enum):
+    ADD = "add"
+    DELETE = "delete"
+    CONTEXT = "context"
+
+
+class DiffLine(BaseModel):
+    type: DiffLineType = Field(description="Line type: add, delete, or context")
+    content: str = Field(description="Line content (without +/- prefix)")
+    old_line_number: int | None = Field(
+        default=None, description="Line number in old file (None for additions)"
+    )
+    new_line_number: int | None = Field(
+        default=None, description="Line number in new file (None for deletions)"
+    )
+
+
 class FileDiff(BaseModel):
     path: str = Field(description="File path")
     status: FileStatus = Field(description="File status (added/modified/deleted/renamed)")
     additions: int = Field(description="Number of lines added")
     deletions: int = Field(description="Number of lines deleted")
     patch: str = Field(description="Unified diff format patch")
+    lines: list[DiffLine] | None = Field(
+        default=None, description="Parsed diff lines with line numbers (for line-level views)"
+    )
 
 
 class CodeDiff(BaseModel):
     base_branch: str = Field(description="Base branch name")
     head_branch: str = Field(description="Head branch name (task branch)")
     files: list[FileDiff] = Field(description="List of file diffs")
+    total_additions: int = Field(default=0, description="Total lines added across all files")
+    total_deletions: int = Field(default=0, description="Total lines deleted across all files")
 
 
 class TaskBase(BaseModel):

@@ -554,6 +554,83 @@ async def spawn_plan_from_task(task_id: UUID, db: Session = Depends(get_db)):
         404: {"model": StandardError, "description": "Task not found or no branch exists"},
     },
 )
-async def get_task_diff(task_id: UUID, db: Session = Depends(get_db)):
-    get_or_404(db, TaskModel, task_id)
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def get_task_diff(
+    task_id: UUID,
+    include_lines: bool = Query(
+        default=False,
+        description="Include parsed line-level diff information for each file",
+    ),
+    db: Session = Depends(get_db),
+):
+    from app.schemas.task import DiffLine, DiffLineType
+    from app.services.git import GitError, generate_diff, parse_patch_lines
+
+    task = get_or_404(db, TaskModel, task_id)
+
+    # Task must have a worktree path to generate diff
+    if not task.worktree_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Task has no worktree - task may not have started coding yet",
+        )
+
+    if not task.branch_name:
+        raise HTTPException(
+            status_code=404,
+            detail="Task has no branch - task may not have started coding yet",
+        )
+
+    # Get the base branch from the project
+    base_branch = task.project.main_branch
+
+    try:
+        diff_result = generate_diff(
+            repo_path=task.worktree_path,
+            base_branch=base_branch,
+            head_branch=task.branch_name,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=f"Git error: {e}")
+
+    # Build file diffs with optional line-level information
+    from app.schemas.task import FileDiff as FileDiffSchema
+
+    files = []
+    total_additions = 0
+    total_deletions = 0
+
+    for file_diff in diff_result.files:
+        total_additions += file_diff.additions
+        total_deletions += file_diff.deletions
+
+        lines = None
+        if include_lines and file_diff.patch:
+            parsed_lines = parse_patch_lines(file_diff.patch)
+            lines = [
+                DiffLine(
+                    type=DiffLineType(line.type),
+                    content=line.content,
+                    old_line_number=line.old_line_number,
+                    new_line_number=line.new_line_number,
+                )
+                for line in parsed_lines
+            ]
+
+        files.append(
+            FileDiffSchema(
+                path=file_diff.path,
+                status=file_diff.status,
+                additions=file_diff.additions,
+                deletions=file_diff.deletions,
+                patch=file_diff.patch,
+                lines=lines,
+            )
+        )
+
+    return CodeDiff(
+        base_branch=diff_result.base_branch,
+        head_branch=diff_result.head_branch,
+        files=files,
+        total_additions=total_additions,
+        total_deletions=total_deletions,
+    )
