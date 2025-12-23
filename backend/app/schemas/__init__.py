@@ -17,6 +17,10 @@ from app.schemas.plan import (
     PlanUpdate,
     PlanWithDetails,
     ProcessingStatus,
+    SpawnedTaskSummary,
+    SpawnTasksRequest,
+    SpawnTasksResponse,
+    SpawnTasksStatus,
 )
 from app.schemas.project import (
     Project,
@@ -72,6 +76,10 @@ __all__ = [
     "PlanGenerateRequest",
     "PlanGenerationStatus",
     "ProcessingStatus",
+    "SpawnTasksRequest",
+    "SpawnTasksResponse",
+    "SpawnedTaskSummary",
+    "SpawnTasksStatus",
     "Task",
     "TaskCreate",
     "TaskUpdate",

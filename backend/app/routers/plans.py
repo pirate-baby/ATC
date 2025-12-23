@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db, get_or_404
+from app.models.enums import PlanTaskStatus as ModelPlanTaskStatus
 from app.models.enums import ProcessingStatus
 from app.models.plan import Plan as PlanModel
 from app.models.project import Project as ProjectModel
 from app.models.review import Review as ReviewModel
+from app.models.task import Task as TaskModel
 from app.schemas import (
     PaginatedResponse,
     Plan,
@@ -21,6 +23,9 @@ from app.schemas import (
     Review,
     ReviewCreate,
     ReviewDecision,
+    SpawnedTaskSummary,
+    SpawnTasksResponse,
+    SpawnTasksStatus,
 )
 from app.schemas.plan import ReviewSummary, TaskSummary, ThreadSummary
 from app.schemas.review import ReviewTargetType
@@ -386,4 +391,253 @@ async def get_plan_generation_status(
         processing_status=plan.processing_status,
         processing_error=plan.processing_error,
         content=plan.content,
+    )
+
+
+async def _run_task_spawning(
+    plan_id: UUID,
+    title: str,
+    content: str,
+    project_id: UUID,
+    project_context: str | None,
+    database_url: str,
+) -> None:
+    """Background task to generate and create tasks from a plan.
+
+    This runs in the background and creates tasks directly in the database.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    # Create a new database session for the background task
+    engine = create_engine(database_url)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+    db = SessionLocal()
+    try:
+        # Get the plan
+        plan = db.query(PlanModel).filter(PlanModel.id == plan_id).first()
+        if not plan:
+            logger.error(f"Plan {plan_id} not found during task spawning")
+            return
+
+        try:
+            # Generate tasks using Claude
+            result = await claude_service.generate_tasks(
+                plan_id=plan_id,
+                title=title,
+                content=content,
+                project_context=project_context,
+            )
+
+            # Create tasks in the database
+            created_tasks: list[TaskModel] = []
+            for i, generated_task in enumerate(result.tasks):
+                new_task = TaskModel(
+                    project_id=project_id,
+                    plan_id=plan_id,
+                    title=generated_task.title,
+                    description=generated_task.description,
+                )
+                db.add(new_task)
+                db.flush()  # Flush to get the ID
+                created_tasks.append(new_task)
+
+            # Now set up blocking relationships using the actual task IDs
+            for i, generated_task in enumerate(result.tasks):
+                if generated_task.blocked_by_indices:
+                    blocking_tasks = [
+                        created_tasks[idx]
+                        for idx in generated_task.blocked_by_indices
+                        if idx < len(created_tasks)
+                    ]
+                    created_tasks[i].blocked_by = blocking_tasks
+                    # Set status to BLOCKED if there are blockers
+                    if blocking_tasks:
+                        created_tasks[i].status = ModelPlanTaskStatus.BLOCKED
+
+            # Update plan processing status
+            plan.processing_status = ProcessingStatus.COMPLETED
+            plan.processing_error = None
+            db.commit()
+
+            logger.info(
+                f"Task spawning completed for plan_id={plan_id}, created {len(created_tasks)} tasks"
+            )
+
+        except (ClaudeNotConfiguredError, ClaudeGenerationError) as e:
+            logger.error(f"Task spawning failed for plan_id={plan_id}: {e}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = str(e)
+            db.commit()
+
+        except Exception as e:
+            logger.exception(f"Unexpected error during task spawning for plan_id={plan_id}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = f"Unexpected error: {e}"
+            db.commit()
+
+    finally:
+        db.close()
+        engine.dispose()
+
+
+@router.post(
+    "/plans/{plan_id}/spawn-tasks",
+    response_model=SpawnTasksStatus,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Spawn tasks from approved plan",
+    description="Generate tasks from an approved plan using Claude AI.",
+    responses={
+        202: {"description": "Task spawning started"},
+        400: {"description": "Plan has no content"},
+        409: {"description": "Plan not approved or spawning already in progress"},
+        503: {"description": "Claude service not configured"},
+    },
+)
+async def spawn_tasks_from_plan(
+    plan_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Start AI-powered task generation from an approved plan.
+
+    This endpoint initiates a background task to generate tasks using Claude.
+    The plan must be in APPROVED status and have content.
+    Poll the /plans/{plan_id}/spawn-status endpoint to check progress.
+    """
+    plan = get_or_404(db, PlanModel, plan_id)
+
+    # Check if Claude service is configured
+    if not claude_service.is_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Claude service not configured. Set ANTHROPIC_API_KEY environment variable.",
+        )
+
+    # Check if plan is approved
+    if plan.status != PlanTaskStatus.APPROVED:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Plan must be in APPROVED status to spawn tasks. Current status: {plan.status.value}",
+        )
+
+    # Check if plan has content
+    if not plan.content:
+        raise HTTPException(
+            status_code=400,
+            detail="Plan has no content. Generate plan content first.",
+        )
+
+    # Check if task spawning is already in progress
+    if plan.processing_status == ProcessingStatus.GENERATING:
+        raise HTTPException(
+            status_code=409,
+            detail="Task spawning already in progress",
+        )
+
+    # Check if there's an active task
+    if is_task_running(plan_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Task spawning already in progress",
+        )
+
+    # Set status to generating
+    plan.processing_status = ProcessingStatus.GENERATING
+    plan.processing_error = None
+    db.flush()
+
+    # Build project context
+    project = plan.project
+    project_context = f"Project: {project.name}"
+    if project.description:
+        project_context += f"\nDescription: {project.description}"
+
+    # Get database URL for background task
+    from app.config import settings
+
+    # Start background task spawning
+    submit_task(
+        plan_id,
+        _run_task_spawning(
+            plan_id=plan_id,
+            title=plan.title,
+            content=plan.content,
+            project_id=plan.project_id,
+            project_context=project_context,
+            database_url=settings.database_url,
+        ),
+    )
+
+    return SpawnTasksStatus(
+        plan_id=plan.id,
+        processing_status=plan.processing_status,
+        processing_error=plan.processing_error,
+        tasks_created=None,
+    )
+
+
+@router.get(
+    "/plans/{plan_id}/spawn-status",
+    response_model=SpawnTasksStatus,
+    summary="Get task spawning status",
+    description="Check the status of task spawning from a plan.",
+    responses={
+        200: {"description": "Current spawning status"},
+        404: {"description": "Plan not found"},
+    },
+)
+async def get_spawn_tasks_status(
+    plan_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Get the current status of task spawning from a plan.
+
+    Poll this endpoint to track the progress of AI-powered task generation.
+    """
+    plan = get_or_404(db, PlanModel, plan_id)
+
+    tasks_created = None
+    if plan.processing_status == ProcessingStatus.COMPLETED:
+        tasks_created = len(plan.tasks)
+
+    return SpawnTasksStatus(
+        plan_id=plan.id,
+        processing_status=plan.processing_status,
+        processing_error=plan.processing_error,
+        tasks_created=tasks_created,
+    )
+
+
+@router.get(
+    "/plans/{plan_id}/spawned-tasks",
+    response_model=SpawnTasksResponse,
+    summary="Get spawned tasks",
+    description="Get the list of tasks that were spawned from this plan.",
+    responses={
+        200: {"description": "List of spawned tasks"},
+        404: {"description": "Plan not found"},
+    },
+)
+async def get_spawned_tasks(
+    plan_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Get all tasks that were spawned from this plan."""
+    plan = get_or_404(db, PlanModel, plan_id)
+
+    tasks = [
+        SpawnedTaskSummary(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            blocked_by=[t.id for t in task.blocked_by],
+        )
+        for task in plan.tasks
+    ]
+
+    return SpawnTasksResponse(
+        plan_id=plan.id,
+        tasks_created=len(tasks),
+        tasks=tasks,
     )

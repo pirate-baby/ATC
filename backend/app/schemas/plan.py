@@ -95,4 +95,44 @@ class PlanGenerationStatus(BaseModel):
     )
 
 
+class SpawnTasksRequest(BaseModel):
+    """Request to spawn tasks from an approved plan."""
+
+    pass  # No additional parameters needed; plan content is used
+
+
+class SpawnedTaskSummary(BaseModel):
+    """Summary of a task spawned from a plan."""
+
+    id: UUID = Field(description="Task ID")
+    title: str = Field(description="Task title")
+    description: str | None = Field(default=None, description="Task description")
+    blocked_by: list[UUID] = Field(
+        default_factory=list, description="IDs of tasks that block this task"
+    )
+
+
+class SpawnTasksResponse(BaseModel):
+    """Response from spawning tasks from a plan."""
+
+    plan_id: UUID = Field(description="Plan ID that spawned the tasks")
+    tasks_created: int = Field(description="Number of tasks created")
+    tasks: list[SpawnedTaskSummary] = Field(description="List of spawned tasks")
+
+
+class SpawnTasksStatus(BaseModel):
+    """Status response for task spawning progress."""
+
+    plan_id: UUID = Field(description="Plan ID")
+    processing_status: ProcessingStatus | None = Field(
+        description="Current processing status"
+    )
+    processing_error: str | None = Field(
+        default=None, description="Error message if spawning failed"
+    )
+    tasks_created: int | None = Field(
+        default=None, description="Number of tasks created (if completed)"
+    )
+
+
 PlanWithDetails.model_rebuild()
