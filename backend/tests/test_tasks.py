@@ -559,3 +559,79 @@ class TestGetTaskDiff:
         fake_id = uuid.uuid4()
         response = authed_client.get(f"/api/v1/tasks/{fake_id}/diff")
         assert response.status_code == 404
+
+
+class TestStartSession:
+    def test_start_session_task_not_found(self, authed_client: TestClient):
+        fake_id = uuid.uuid4()
+        response = authed_client.post(f"/api/v1/tasks/{fake_id}/start-session")
+        assert response.status_code == 404
+
+    def test_start_session_wrong_status(
+        self, authed_client: TestClient, session: Session, project: Project
+    ):
+        # Task in REVIEW status should not be startable
+        task = Task(
+            project_id=project.id,
+            title="Review Task",
+            status=PlanTaskStatus.REVIEW,
+        )
+        session.add(task)
+        session.flush()
+
+        response = authed_client.post(f"/api/v1/tasks/{task.id}/start-session")
+        assert response.status_code == 400
+        assert "Cannot start session" in response.json()["detail"]
+
+    def test_start_session_already_has_worktree(
+        self, authed_client: TestClient, session: Session, project: Project
+    ):
+        # Task that already has a worktree path
+        task = Task(
+            project_id=project.id,
+            title="Task with Worktree",
+            status=PlanTaskStatus.BACKLOG,
+            worktree_path="/some/path",
+        )
+        session.add(task)
+        session.flush()
+
+        response = authed_client.post(f"/api/v1/tasks/{task.id}/start-session")
+        assert response.status_code == 409
+        assert "already has a worktree" in response.json()["detail"]
+
+    def test_start_session_project_no_git_url(
+        self, authed_client: TestClient, session: Session
+    ):
+        # Create project without git_url
+        project = Project(
+            name="No Git Project",
+            git_url="",  # Empty git_url
+        )
+        session.add(project)
+        session.flush()
+
+        task = Task(
+            project_id=project.id,
+            title="Task",
+            status=PlanTaskStatus.BACKLOG,
+        )
+        session.add(task)
+        session.flush()
+
+        response = authed_client.post(f"/api/v1/tasks/{task.id}/start-session")
+        assert response.status_code == 400
+        assert "git_url" in response.json()["detail"]
+
+
+class TestEndSession:
+    def test_end_session_task_not_found(self, authed_client: TestClient):
+        fake_id = uuid.uuid4()
+        response = authed_client.post(f"/api/v1/tasks/{fake_id}/end-session")
+        assert response.status_code == 404
+
+    def test_end_session_no_active_session(self, authed_client: TestClient, task: Task):
+        # Task without worktree_path
+        response = authed_client.post(f"/api/v1/tasks/{task.id}/end-session")
+        assert response.status_code == 400
+        assert "does not have an active worktree" in response.json()["detail"]

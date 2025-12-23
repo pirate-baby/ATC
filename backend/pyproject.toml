@@ -15,6 +15,7 @@ dependencies = [
     "sse-starlette>=2.0.0",
     "python-jose[cryptography]>=3.3.0",
     "httpx>=0.26.0",
+    "gitpython>=3.1.0",
 ]
 
 [project.optional-dependencies]

@@ -19,7 +19,15 @@ from app.schemas.project import (
 )
 from app.schemas.review import Review, ReviewCreate, ReviewDecision
 from app.schemas.session import CodingSession, CodingSessionStatus, SessionTargetType
-from app.schemas.task import CodeDiff, FileDiff, Task, TaskCreate, TaskUpdate, TaskWithDetails
+from app.schemas.task import (
+    CodeDiff,
+    FileDiff,
+    StartSessionResponse,
+    Task,
+    TaskCreate,
+    TaskUpdate,
+    TaskWithDetails,
+)
 from app.schemas.triage import (
     TriageConnection,
     TriageConnectionCreate,
@@ -57,6 +65,7 @@ __all__ = [
     "TaskCreate",
     "TaskUpdate",
     "TaskWithDetails",
+    "StartSessionResponse",
     "CodeDiff",
     "FileDiff",
     "User",

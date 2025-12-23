@@ -1,9 +1,11 @@
 from collections import deque
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db, get_or_404
 from app.models.enums import PlanTaskStatus, ReviewDecision, ReviewTargetType
 from app.models.plan import Plan as PlanModel
@@ -17,6 +19,7 @@ from app.schemas import (
     Review,
     ReviewCreate,
     StandardError,
+    StartSessionResponse,
     Task,
     TaskCreate,
     TaskUpdate,
@@ -30,6 +33,12 @@ from app.schemas.task import (
     SessionSummary,
     TaskSummary,
     ThreadSummary,
+)
+from app.services.git import (
+    BranchExistsError,
+    GitError,
+    GitService,
+    WorktreeExistsError,
 )
 
 router = APIRouter()
@@ -542,6 +551,123 @@ async def spawn_plan_from_task(task_id: UUID, db: Session = Depends(get_db)):
     db.add(new_plan)
     db.flush()
     return new_plan
+
+
+@router.post(
+    "/tasks/{task_id}/start-session",
+    response_model=StartSessionResponse,
+    summary="Start coding session",
+    description="Create a git worktree and branch for this task, transitioning to coding status.",
+    responses={
+        400: {"model": StandardError, "description": "Task cannot start session (wrong status)"},
+        401: {"model": StandardError, "description": "Unauthorized"},
+        404: {"model": StandardError, "description": "Task not found"},
+        409: {"model": StandardError, "description": "Worktree or branch already exists"},
+    },
+)
+async def start_session(task_id: UUID, db: Session = Depends(get_db)):
+    task = get_or_404(db, TaskModel, task_id)
+
+    allowed_statuses = (PlanTaskStatus.BACKLOG,)
+    if task.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot start session for task in '{task.status.value}' status. "
+            f"Task must be in one of: {', '.join(s.value for s in allowed_statuses)}",
+        )
+
+    if task.worktree_path or task.branch_name:
+        raise HTTPException(
+            status_code=409,
+            detail="Task already has a worktree/branch. End the existing session first.",
+        )
+
+    project = task.project
+    if not project.git_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Project does not have a git_url configured",
+        )
+
+    git_service = GitService(settings.worktrees_base_path)
+
+    try:
+        result = git_service.create_task_worktree(
+            project_id=project.id,
+            task_id=task.id,
+            task_title=task.title,
+            git_url=project.git_url,
+            base_branch=project.main_branch,
+        )
+    except WorktreeExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except BranchExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=f"Git operation failed: {e}")
+
+    now = datetime.now(timezone.utc)
+    task.worktree_path = result.worktree_path
+    task.branch_name = result.branch_name
+    task.status = PlanTaskStatus.CODING
+    task.session_started_at = now
+    task.version += 1
+
+    db.flush()
+
+    return StartSessionResponse(
+        task_id=task.id,
+        branch_name=result.branch_name,
+        worktree_path=result.worktree_path,
+        status=SchemaPlanTaskStatus(task.status.value),
+        session_started_at=now,
+    )
+
+
+@router.post(
+    "/tasks/{task_id}/end-session",
+    response_model=Task,
+    summary="End coding session",
+    description="Clean up the git worktree for this task. Does not delete the branch.",
+    responses={
+        400: {"model": StandardError, "description": "Task has no active session"},
+        401: {"model": StandardError, "description": "Unauthorized"},
+        404: {"model": StandardError, "description": "Task not found"},
+    },
+)
+async def end_session(
+    task_id: UUID,
+    force: bool = Query(default=False, description="Force cleanup even with uncommitted changes"),
+    db: Session = Depends(get_db),
+):
+    task = get_or_404(db, TaskModel, task_id)
+
+    if not task.worktree_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Task does not have an active worktree session",
+        )
+
+    project = task.project
+    git_service = GitService(settings.worktrees_base_path)
+
+    try:
+        git_service.cleanup_task_worktree(
+            project_id=project.id,
+            task_id=task.id,
+            branch_name=task.branch_name,
+            force=force,
+            should_delete_branch=False,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=f"Git cleanup failed: {e}")
+
+    task.worktree_path = None
+    task.session_ended_at = datetime.now(timezone.utc)
+    task.version += 1
+
+    db.flush()
+    return Task.model_validate(task)
 
 
 @router.get(

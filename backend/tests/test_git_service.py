@@ -1,26 +1,30 @@
 """Tests for Git service operations."""
 
-import subprocess
-import tempfile
+import uuid
 from pathlib import Path
-from unittest import mock
 
 import pytest
+from git import Repo
 
+from app.schemas.task import FileStatus
 from app.services.git import (
-    DiffLine,
-    DiffResult,
     GitError,
+    GitService,
     _extract_file_patch,
+    _generate_branch_name,
     _parse_diff_stat_line,
     _parse_name_status,
+    _slugify,
     generate_diff,
     get_current_branch,
     parse_hunk_header,
     parse_patch_lines,
     validate_comment_line_number,
 )
-from app.schemas.task import FileStatus
+
+# =============================================================================
+# Diff Generation Tests
+# =============================================================================
 
 
 class TestParseDiffStatLine:
@@ -218,7 +222,7 @@ index abc123..def456 100644
         assert len(lines) == 6
 
         # Check line numbers in second hunk
-        line10 = next(l for l in lines if l.content == "line 10")
+        line10 = next(line for line in lines if line.content == "line 10")
         assert line10.old_line_number == 10
         assert line10.new_line_number == 10
 
@@ -255,40 +259,25 @@ class TestValidateCommentLineNumber:
 
 
 class TestGitOperationsIntegration:
-    """Integration tests that use actual git commands."""
+    """Integration tests that use GitPython."""
 
     @pytest.fixture
     def git_repo(self, tmp_path: Path):
         """Create a temporary git repository with some commits."""
-        repo = tmp_path / "repo"
-        repo.mkdir()
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
 
-        # Initialize repo
-        subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "test@test.com"],
-            cwd=repo,
-            capture_output=True,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "Test"],
-            cwd=repo,
-            capture_output=True,
-            check=True,
-        )
+        # Initialize repo using GitPython
+        repo = Repo.init(repo_path)
+        repo.config_writer().set_value("user", "email", "test@test.com").release()
+        repo.config_writer().set_value("user", "name", "Test").release()
 
         # Create initial commit on main
-        (repo / "file.txt").write_text("initial content\n")
-        subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "initial"],
-            cwd=repo,
-            capture_output=True,
-            check=True,
-        )
+        (repo_path / "file.txt").write_text("initial content\n")
+        repo.index.add(["file.txt"])
+        repo.index.commit("initial")
 
-        return repo
+        return repo_path
 
     def test_get_current_branch(self, git_repo: Path):
         branch = get_current_branch(git_repo)
@@ -302,15 +291,12 @@ class TestGitOperationsIntegration:
 
     def test_generate_diff_with_changes(self, git_repo: Path):
         """Test diff with actual file changes."""
+        repo = Repo(git_repo)
         base_branch = get_current_branch(git_repo)
 
         # Create a new branch
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
-            cwd=git_repo,
-            capture_output=True,
-            check=True,
-        )
+        repo.create_head("feature")
+        repo.heads.feature.checkout()
 
         # Modify existing file
         (git_repo / "file.txt").write_text("modified content\n")
@@ -318,13 +304,8 @@ class TestGitOperationsIntegration:
         # Add new file
         (git_repo / "new_file.txt").write_text("new file\n")
 
-        subprocess.run(["git", "add", "."], cwd=git_repo, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "feature changes"],
-            cwd=git_repo,
-            capture_output=True,
-            check=True,
-        )
+        repo.index.add(["file.txt", "new_file.txt"])
+        repo.index.commit("feature changes")
 
         result = generate_diff(git_repo, base_branch, "feature")
 
@@ -340,23 +321,15 @@ class TestGitOperationsIntegration:
 
     def test_generate_diff_deleted_file(self, git_repo: Path):
         """Test diff with file deletion."""
+        repo = Repo(git_repo)
         base_branch = get_current_branch(git_repo)
 
-        subprocess.run(
-            ["git", "checkout", "-b", "delete-branch"],
-            cwd=git_repo,
-            capture_output=True,
-            check=True,
-        )
+        repo.create_head("delete-branch")
+        repo.heads["delete-branch"].checkout()
 
         (git_repo / "file.txt").unlink()
-        subprocess.run(["git", "add", "."], cwd=git_repo, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "delete file"],
-            cwd=git_repo,
-            capture_output=True,
-            check=True,
-        )
+        repo.index.remove(["file.txt"])
+        repo.index.commit("delete file")
 
         result = generate_diff(git_repo, base_branch, "delete-branch")
         assert len(result.files) == 1
@@ -372,3 +345,80 @@ class TestGitOperationsIntegration:
         """Test that invalid branch raises GitError."""
         with pytest.raises(GitError):
             generate_diff(git_repo, "nonexistent-branch")
+
+
+# =============================================================================
+# Worktree Management Tests
+# =============================================================================
+
+
+class TestSlugify:
+    def test_basic_slug(self):
+        assert _slugify("Hello World") == "hello-world"
+
+    def test_special_characters(self):
+        assert _slugify("Fix: bug #123!") == "fix-bug-123"
+
+    def test_consecutive_hyphens(self):
+        assert _slugify("Hello   World") == "hello-world"
+
+    def test_leading_trailing_hyphens(self):
+        assert _slugify("  Hello World  ") == "hello-world"
+
+    def test_max_length(self):
+        long_text = "a" * 100
+        result = _slugify(long_text, max_length=50)
+        assert len(result) == 50
+
+    def test_empty_string(self):
+        assert _slugify("") == ""
+
+    def test_only_special_chars(self):
+        assert _slugify("!@#$%") == ""
+
+
+class TestGenerateBranchName:
+    def test_basic_branch_name(self):
+        task_id = uuid.UUID("12345678-1234-1234-1234-123456789abc")
+        branch = _generate_branch_name(task_id, "Implement login feature")
+        assert branch == "vk/12345678-implement-login-feature"
+
+    def test_branch_name_with_special_chars(self):
+        task_id = uuid.UUID("abcdef12-1234-1234-1234-123456789abc")
+        branch = _generate_branch_name(task_id, "Fix: bug #123!")
+        assert branch == "vk/abcdef12-fix-bug-123"
+
+    def test_branch_name_short_id(self):
+        task_id = uuid.UUID("12345678-1234-1234-1234-123456789abc")
+        branch = _generate_branch_name(task_id, "test")
+        # Short ID should be first 8 chars of UUID
+        assert branch.startswith("vk/12345678-")
+
+    def test_branch_name_long_title_truncated(self):
+        task_id = uuid.UUID("12345678-1234-1234-1234-123456789abc")
+        long_title = "a" * 100
+        branch = _generate_branch_name(task_id, long_title)
+        # slug is truncated to 50 chars, plus "vk/" prefix and short id
+        assert len(branch) <= 63  # vk/ (3) + short_id (8) + - (1) + slug (50) = 62
+
+
+class TestGitServiceHelpers:
+    """Tests for git service helper functions that don't require git."""
+
+    @pytest.fixture
+    def git_service(self, tmp_path):
+        return GitService(tmp_path)
+
+    def test_get_bare_repo_path(self, git_service, tmp_path):
+        project_id = uuid.uuid4()
+        path = git_service._get_bare_repo_path(project_id)
+        assert str(project_id) in str(path)
+        assert "repos" in str(path)
+
+    def test_get_worktree_path(self, git_service, tmp_path):
+        project_id = uuid.uuid4()
+        task_id = uuid.uuid4()
+        path = git_service._get_worktree_path(project_id, task_id)
+        assert str(project_id) in str(path)
+        assert str(task_id) in str(path)
+        assert "tasks" in str(path)

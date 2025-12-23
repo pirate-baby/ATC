@@ -165,4 +165,12 @@ class SessionSummary(BaseModel):
     started_at: datetime
 
 
+class StartSessionResponse(BaseModel):
+    task_id: UUID = Field(description="Task ID")
+    branch_name: str = Field(description="Git branch name created for this task")
+    worktree_path: str = Field(description="Path to the git worktree")
+    status: PlanTaskStatus = Field(description="New task status (should be 'coding')")
+    session_started_at: datetime = Field(description="Timestamp when session started")
+
+
 TaskWithDetails.model_rebuild()

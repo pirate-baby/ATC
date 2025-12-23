@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +19,9 @@ class Settings(BaseSettings):
     github_client_id: str | None = None
     github_client_secret: str | None = None
     github_redirect_uri: str | None = None
+
+    # Git worktree settings
+    worktrees_base_path: Path = Path("/var/lib/atc/worktrees")
 
 
 settings = Settings()
