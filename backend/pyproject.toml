@@ -17,6 +17,8 @@ dependencies = [
     "httpx>=0.26.0",
     "gitpython>=3.1.0",
     "claude-agent-sdk>=0.1.0",
+    "arq>=0.26.0",
+    "redis>=5.0.0",
 ]
 
 [project.optional-dependencies]

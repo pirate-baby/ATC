@@ -2,6 +2,7 @@ from app.routers.auth import router as auth_router
 from app.routers.comments import router as comments_router
 from app.routers.events import router as events_router
 from app.routers.hats import router as hats_router
+from app.routers.jobs import router as jobs_router
 from app.routers.plans import router as plans_router
 from app.routers.projects import router as projects_router
 from app.routers.sessions import router as sessions_router
@@ -22,4 +23,5 @@ __all__ = [
     "triage_router",
     "system_router",
     "events_router",
+    "jobs_router",
 ]

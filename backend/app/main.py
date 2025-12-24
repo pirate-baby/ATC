@@ -1,3 +1,6 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -7,6 +10,7 @@ from app.routers import (
     comments_router,
     events_router,
     hats_router,
+    jobs_router,
     plans_router,
     projects_router,
     sessions_router,
@@ -15,6 +19,24 @@ from app.routers import (
     triage_router,
     users_router,
 )
+from app.services.task_queue import close_redis_pool, get_redis_pool
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan context manager for startup/shutdown events."""
+    # Startup
+    logger.info("Initializing Redis connection pool...")
+    await get_redis_pool()
+    logger.info("Redis connection pool initialized")
+    yield
+    # Shutdown
+    logger.info("Closing Redis connection pool...")
+    await close_redis_pool()
+    logger.info("Redis connection pool closed")
+
 
 app = FastAPI(
     title="ATC API",
@@ -23,6 +45,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
 app.add_middleware(AuthMiddleware)
@@ -47,6 +70,7 @@ ROUTERS = [
     (triage_router, "Triage"),
     (system_router, "System"),
     (events_router, "Events"),
+    (jobs_router, "Jobs"),
 ]
 
 for router, tag in ROUTERS:

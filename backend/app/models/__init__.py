@@ -10,6 +10,7 @@ from app.models.enums import (
     TriageProvider,
 )
 from app.models.hat import HAT
+from app.models.job_execution import JobExecution, JobStatus
 from app.models.plan import Plan
 from app.models.project import Project, ProjectSettings
 from app.models.review import Review
@@ -27,6 +28,7 @@ __all__ = [
     "CommentThreadTargetType",
     "ReviewTargetType",
     "ReviewDecision",
+    "JobStatus",
     # Models
     "CodingSession",
     "User",
@@ -41,4 +43,5 @@ __all__ = [
     "CommentThread",
     "Comment",
     "Review",
+    "JobExecution",
 ]

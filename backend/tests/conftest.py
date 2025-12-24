@@ -1,12 +1,13 @@
 """Test fixtures for ATC Backend.
 
 Uses PostgreSQL via docker-compose for testing to match production environment.
-Run `docker compose up db` before running tests locally.
+Run `docker compose up db redis` before running tests locally.
 """
 
 import os
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 # Set test environment variables before importing app modules
 os.environ.setdefault("JWT_SECRET_KEY", "atc-dev-jwt-secret-do-not-use-in-production")
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg2://atc:atc_dev@localhost:5432/atc_test")
+os.environ.setdefault("REDIS_URL", "redis://redis:6379")
 
 from app.config import settings
 from app.database import get_db
@@ -262,3 +264,63 @@ def task_in_review_with_settings(session: Session, project_with_settings: Projec
     session.add(task)
     session.flush()
     return task
+
+
+# ============================================================================
+# Task Queue Fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def mock_redis_pool():
+    """Mock ARQ Redis pool for testing.
+
+    This fixture mocks the Redis connection pool to avoid needing Redis
+    running for unit tests. For integration tests, use the real Redis.
+    """
+    mock_job = MagicMock()
+    mock_job.job_id = "test_job_123"
+
+    mock_pool = AsyncMock()
+    mock_pool.enqueue_job = AsyncMock(return_value=mock_job)
+    mock_pool.queued_jobs = AsyncMock(return_value=[])
+    mock_pool.close = AsyncMock()
+
+    with patch("app.services.task_queue._redis_pool", mock_pool):
+        with patch("app.services.task_queue.get_redis_pool", AsyncMock(return_value=mock_pool)):
+            yield mock_pool
+
+
+@pytest.fixture
+def mock_job_not_running():
+    """Mock is_job_running to return False."""
+    with patch("app.services.task_queue.is_job_running", AsyncMock(return_value=False)):
+        yield
+
+
+@pytest.fixture
+def mock_job_running():
+    """Mock is_job_running to return True."""
+    with patch("app.services.task_queue.is_job_running", AsyncMock(return_value=True)):
+        yield
+
+
+@pytest.fixture
+def mock_claude_service():
+    """Mock Claude service for testing plan generation."""
+    mock_result = MagicMock()
+    mock_result.content = "Generated plan content for testing"
+
+    mock_task_result = MagicMock()
+    mock_task_result.tasks = []
+
+    with patch("app.services.claude.claude_service.is_configured", True):
+        with patch(
+            "app.services.claude.claude_service.generate_plan",
+            AsyncMock(return_value=mock_result),
+        ):
+            with patch(
+                "app.services.claude.claude_service.generate_tasks",
+                AsyncMock(return_value=mock_task_result),
+            ):
+                yield

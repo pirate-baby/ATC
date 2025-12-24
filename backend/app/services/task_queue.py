@@ -1,103 +1,399 @@
-"""Background task queue for async operations.
+"""Background task queue using ARQ with Redis.
 
-This module provides a simple in-memory task queue for background processing.
-In production, this should be replaced with a proper task queue like Celery, ARQ, or Dramatiq.
-
-See ticket: 54156901-6298-4b71-9f93-c74cdf2f0495
+Provides crash-resilient task execution with retry logic,
+persistence, and monitoring capabilities.
 """
 
-import asyncio
 import logging
-from typing import Callable, Coroutine, Any
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
+
+from arq import create_pool
+from arq.connections import ArqRedis, RedisSettings
+from arq.jobs import Job, JobStatus as ArqJobStatus
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# In-memory task storage
-# TODO: Replace with proper task queue (Celery, ARQ, Dramatiq)
-# See ticket: 54156901-6298-4b71-9f93-c74cdf2f0495
-_tasks: dict[UUID, asyncio.Task] = {}
+# Global connection pool (initialized on startup)
+_redis_pool: ArqRedis | None = None
 
 
-def submit_task(task_id: UUID, coro: Coroutine[Any, Any, None]) -> asyncio.Task:
-    """Submit a coroutine to run as a background task.
+def get_redis_settings() -> RedisSettings:
+    """Get Redis settings from application config."""
+    return RedisSettings.from_dsn(settings.redis_url)
 
-    Args:
-        task_id: Unique identifier for the task
-        coro: Coroutine to execute
 
-    Returns:
-        The created asyncio.Task
+async def get_redis_pool() -> ArqRedis:
+    """Get or create the Redis connection pool."""
+    global _redis_pool
+    if _redis_pool is None:
+        _redis_pool = await create_pool(get_redis_settings())
+    return _redis_pool
 
-    Raises:
-        ValueError: If a task with the same ID is already running
+
+async def close_redis_pool() -> None:
+    """Close the Redis connection pool."""
+    global _redis_pool
+    if _redis_pool is not None:
+        await _redis_pool.close()
+        _redis_pool = None
+
+
+# ============================================================================
+# Job Definitions (executed by workers)
+# ============================================================================
+
+
+async def run_plan_generation(
+    ctx: dict[str, Any],
+    plan_id: str,
+    title: str,
+    context: str | None,
+    project_context: str | None,
+) -> dict[str, Any]:
+    """Generate plan content using Claude.
+
+    This job is executed by ARQ workers with automatic retry on failure.
     """
-    if task_id in _tasks and not _tasks[task_id].done():
-        raise ValueError(f"Task {task_id} is already running")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
 
-    async def _wrapped_task():
+    from app.models.enums import ProcessingStatus
+    from app.models.plan import Plan as PlanModel
+    from app.services.claude import (
+        ClaudeGenerationError,
+        ClaudeNotConfiguredError,
+        claude_service,
+    )
+
+    plan_uuid = UUID(plan_id)
+
+    # Create database session for this job
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    db = SessionLocal()
+
+    try:
+        plan = db.query(PlanModel).filter(PlanModel.id == plan_uuid).first()
+        if not plan:
+            logger.error(f"Plan {plan_id} not found during generation")
+            return {"success": False, "error": "Plan not found"}
+
         try:
-            await coro
-        finally:
-            # Clean up task reference when done
-            _tasks.pop(task_id, None)
+            result = await claude_service.generate_plan(
+                plan_id=plan_uuid,
+                title=title,
+                context=context,
+                project_context=project_context,
+            )
 
-    task = asyncio.create_task(_wrapped_task())
-    _tasks[task_id] = task
-    logger.debug(f"Submitted background task {task_id}")
-    return task
+            plan.content = result.content
+            plan.processing_status = ProcessingStatus.COMPLETED
+            plan.processing_error = None
+            db.commit()
+
+            logger.info(f"Plan generation completed for plan_id={plan_id}")
+            return {
+                "success": True,
+                "plan_id": plan_id,
+                "content_length": len(result.content),
+            }
+
+        except (ClaudeNotConfiguredError, ClaudeGenerationError) as e:
+            logger.error(f"Plan generation failed for plan_id={plan_id}: {e}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = str(e)
+            db.commit()
+            raise  # Re-raise to trigger ARQ retry
+
+    except Exception as e:
+        logger.exception(f"Unexpected error during plan generation for plan_id={plan_id}")
+        try:
+            plan = db.query(PlanModel).filter(PlanModel.id == plan_uuid).first()
+            if plan:
+                plan.processing_status = ProcessingStatus.FAILED
+                plan.processing_error = f"Unexpected error: {e}"
+                db.commit()
+        except Exception:
+            pass
+        raise
+
+    finally:
+        db.close()
+        engine.dispose()
 
 
-def is_task_running(task_id: UUID) -> bool:
-    """Check if a task is currently running.
+async def run_task_spawning(
+    ctx: dict[str, Any],
+    plan_id: str,
+    title: str,
+    content: str,
+    project_id: str,
+    project_context: str | None,
+) -> dict[str, Any]:
+    """Generate tasks from approved plan using Claude.
 
-    Args:
-        task_id: Task identifier to check
-
-    Returns:
-        True if task exists and is not done, False otherwise
+    This job is executed by ARQ workers with automatic retry on failure.
     """
-    return task_id in _tasks and not _tasks[task_id].done()
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models.enums import PlanTaskStatus as ModelPlanTaskStatus
+    from app.models.enums import ProcessingStatus
+    from app.models.plan import Plan as PlanModel
+    from app.models.task import Task as TaskModel
+    from app.services.claude import (
+        ClaudeGenerationError,
+        ClaudeNotConfiguredError,
+        claude_service,
+    )
+
+    plan_uuid = UUID(plan_id)
+    project_uuid = UUID(project_id)
+
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    db = SessionLocal()
+
+    try:
+        plan = db.query(PlanModel).filter(PlanModel.id == plan_uuid).first()
+        if not plan:
+            logger.error(f"Plan {plan_id} not found during task spawning")
+            return {"success": False, "error": "Plan not found"}
+
+        try:
+            result = await claude_service.generate_tasks(
+                plan_id=plan_uuid,
+                title=title,
+                content=content,
+                project_context=project_context,
+            )
+
+            created_tasks: list[TaskModel] = []
+            for generated_task in result.tasks:
+                new_task = TaskModel(
+                    project_id=project_uuid,
+                    plan_id=plan_uuid,
+                    title=generated_task.title,
+                    description=generated_task.description,
+                )
+                db.add(new_task)
+                db.flush()
+                created_tasks.append(new_task)
+
+            # Set up blocking relationships
+            for i, generated_task in enumerate(result.tasks):
+                if generated_task.blocked_by_indices:
+                    blocking_tasks = [
+                        created_tasks[idx]
+                        for idx in generated_task.blocked_by_indices
+                        if idx < len(created_tasks)
+                    ]
+                    created_tasks[i].blocked_by = blocking_tasks
+                    if blocking_tasks:
+                        created_tasks[i].status = ModelPlanTaskStatus.BLOCKED
+
+            plan.processing_status = ProcessingStatus.COMPLETED
+            plan.processing_error = None
+            db.commit()
+
+            logger.info(
+                f"Task spawning completed for plan_id={plan_id}, created {len(created_tasks)} tasks"
+            )
+            return {
+                "success": True,
+                "plan_id": plan_id,
+                "tasks_created": len(created_tasks),
+            }
+
+        except (ClaudeNotConfiguredError, ClaudeGenerationError) as e:
+            logger.error(f"Task spawning failed for plan_id={plan_id}: {e}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = str(e)
+            db.commit()
+            raise
+
+    except Exception as e:
+        logger.exception(f"Unexpected error during task spawning for plan_id={plan_id}")
+        try:
+            plan = db.query(PlanModel).filter(PlanModel.id == plan_uuid).first()
+            if plan:
+                plan.processing_status = ProcessingStatus.FAILED
+                plan.processing_error = f"Unexpected error: {e}"
+                db.commit()
+        except Exception:
+            pass
+        raise
+
+    finally:
+        db.close()
+        engine.dispose()
 
 
-def get_task(task_id: UUID) -> asyncio.Task | None:
-    """Get a task by ID.
+# ============================================================================
+# Task Submission API (used by FastAPI endpoints)
+# ============================================================================
 
-    Args:
-        task_id: Task identifier
 
-    Returns:
-        The asyncio.Task if it exists, None otherwise
+async def submit_plan_generation(
+    plan_id: UUID,
+    title: str,
+    context: str | None = None,
+    project_context: str | None = None,
+) -> str:
+    """Submit a plan generation job to the queue.
+
+    Returns the ARQ job ID for status tracking.
     """
-    return _tasks.get(task_id)
+    pool = await get_redis_pool()
+
+    job = await pool.enqueue_job(
+        "run_plan_generation",
+        str(plan_id),
+        title,
+        context,
+        project_context,
+        _job_id=f"plan_gen_{plan_id}",
+    )
+
+    logger.info(f"Submitted plan generation job for plan_id={plan_id}, job_id={job.job_id}")
+    return job.job_id
 
 
-def cancel_task(task_id: UUID) -> bool:
-    """Cancel a running task.
+async def submit_task_spawning(
+    plan_id: UUID,
+    title: str,
+    content: str,
+    project_id: UUID,
+    project_context: str | None = None,
+) -> str:
+    """Submit a task spawning job to the queue.
 
-    Args:
-        task_id: Task identifier to cancel
-
-    Returns:
-        True if task was cancelled, False if task not found or already done
+    Returns the ARQ job ID for status tracking.
     """
-    task = _tasks.get(task_id)
-    if task and not task.done():
-        task.cancel()
-        _tasks.pop(task_id, None)
-        logger.info(f"Cancelled background task {task_id}")
-        return True
-    return False
+    pool = await get_redis_pool()
+
+    job = await pool.enqueue_job(
+        "run_task_spawning",
+        str(plan_id),
+        title,
+        content,
+        str(project_id),
+        project_context,
+        _job_id=f"task_spawn_{plan_id}",
+    )
+
+    logger.info(f"Submitted task spawning job for plan_id={plan_id}, job_id={job.job_id}")
+    return job.job_id
 
 
-def get_running_task_count() -> int:
-    """Get the number of currently running tasks.
+async def get_job_status(job_id: str) -> dict[str, Any]:
+    """Get the status of a job by ID."""
+    pool = await get_redis_pool()
+    job = Job(job_id, pool)
+    status = await job.status()
+    info = await job.info()
 
-    Returns:
-        Count of running tasks
-    """
-    # Clean up completed tasks while counting
-    completed = [tid for tid, task in _tasks.items() if task.done()]
-    for tid in completed:
-        _tasks.pop(tid, None)
-    return len(_tasks)
+    result = None
+    if status == ArqJobStatus.complete:
+        try:
+            result = await job.result()
+        except Exception:
+            pass
+
+    return {
+        "job_id": job_id,
+        "status": status.value if status else "unknown",
+        "result": result,
+        "info": info,
+    }
+
+
+async def is_job_running(job_id: str) -> bool:
+    """Check if a job is currently running or queued."""
+    pool = await get_redis_pool()
+    job = Job(job_id, pool)
+    status = await job.status()
+    return status in (ArqJobStatus.queued, ArqJobStatus.in_progress)
+
+
+async def cancel_job(job_id: str) -> bool:
+    """Attempt to cancel a job."""
+    pool = await get_redis_pool()
+    job = Job(job_id, pool)
+    return await job.abort()
+
+
+async def get_queue_info() -> dict[str, Any]:
+    """Get information about the queue status."""
+    pool = await get_redis_pool()
+    queued_jobs = await pool.queued_jobs()
+
+    return {
+        "redis_connected": True,
+        "queued_job_count": len(queued_jobs) if queued_jobs else 0,
+        "queued_jobs": [
+            {"job_id": job.job_id, "function": job.function, "enqueue_time": job.enqueue_time}
+            for job in (queued_jobs or [])[:10]  # Limit to first 10
+        ],
+    }
+
+
+# ============================================================================
+# ARQ Worker Configuration
+# ============================================================================
+
+
+async def startup(ctx: dict[str, Any]) -> None:
+    """Worker startup hook."""
+    ctx["worker_id"] = str(uuid4())[:8]
+    logger.info(f"ARQ worker starting up with id={ctx['worker_id']}")
+
+
+async def shutdown(ctx: dict[str, Any]) -> None:
+    """Worker shutdown hook."""
+    logger.info(f"ARQ worker shutting down with id={ctx.get('worker_id')}")
+
+
+async def on_job_start(ctx: dict[str, Any]) -> None:
+    """Called when a job starts."""
+    logger.debug(f"Job starting: {ctx.get('job_id')} on worker {ctx.get('worker_id')}")
+
+
+async def on_job_end(ctx: dict[str, Any]) -> None:
+    """Called when a job ends (success or failure)."""
+    logger.debug(f"Job ended: {ctx.get('job_id')}")
+
+
+class WorkerSettings:
+    """ARQ Worker configuration."""
+
+    functions = [
+        run_plan_generation,
+        run_task_spawning,
+    ]
+
+    redis_settings = get_redis_settings()
+
+    # Retry configuration with exponential backoff
+    max_tries = settings.task_queue_max_retries
+    retry_jobs = True
+
+    # Job timeout (for long-running Claude API calls)
+    job_timeout = settings.task_queue_job_timeout_seconds
+
+    # Concurrency (adjust based on Claude API rate limits)
+    max_jobs = 10
+
+    # Lifecycle hooks
+    on_startup = startup
+    on_shutdown = shutdown
+    after_job_end = on_job_end
+
+    # Health check
+    health_check_interval = 30
+
+    # Keep results for 24 hours
+    keep_result = 86400

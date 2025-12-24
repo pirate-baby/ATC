@@ -26,5 +26,13 @@ class Settings(BaseSettings):
     # Anthropic API settings
     anthropic_api_key: str | None = None
 
+    # Redis settings for task queue
+    redis_url: str = "redis://localhost:6379"
+
+    # Task queue settings
+    task_queue_max_retries: int = 3
+    task_queue_retry_delay_seconds: int = 60
+    task_queue_job_timeout_seconds: int = 600  # 10 minutes for Claude API calls
+
 
 settings = Settings()

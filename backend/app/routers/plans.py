@@ -5,12 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db, get_or_404
-from app.models.enums import PlanTaskStatus as ModelPlanTaskStatus
 from app.models.enums import ProcessingStatus
 from app.models.plan import Plan as PlanModel
 from app.models.project import Project as ProjectModel
 from app.models.review import Review as ReviewModel
-from app.models.task import Task as TaskModel
 from app.schemas import (
     PaginatedResponse,
     Plan,
@@ -29,12 +27,12 @@ from app.schemas import (
 )
 from app.schemas.plan import ReviewSummary, TaskSummary, ThreadSummary
 from app.schemas.review import ReviewTargetType
-from app.services.claude import (
-    ClaudeGenerationError,
-    ClaudeNotConfiguredError,
-    claude_service,
+from app.services.claude import claude_service
+from app.services.task_queue import (
+    is_job_running,
+    submit_plan_generation,
+    submit_task_spawning,
 )
-from app.services.task_queue import is_task_running, submit_task
 
 logger = logging.getLogger(__name__)
 
@@ -224,66 +222,6 @@ async def approve_plan(plan_id: UUID, db: Session = Depends(get_db)):
     return plan
 
 
-async def _run_plan_generation(
-    plan_id: UUID,
-    title: str,
-    context: str | None,
-    project_context: str | None,
-    database_url: str,
-) -> None:
-    """Background task to generate plan content.
-
-    This runs in the background and updates the plan directly in the database.
-    """
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    # Create a new database session for the background task
-    engine = create_engine(database_url)
-    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-
-    db = SessionLocal()
-    try:
-        # Get the plan
-        plan = db.query(PlanModel).filter(PlanModel.id == plan_id).first()
-        if not plan:
-            logger.error(f"Plan {plan_id} not found during generation")
-            return
-
-        try:
-            # Generate the content
-            result = await claude_service.generate_plan(
-                plan_id=plan_id,
-                title=title,
-                context=context,
-                project_context=project_context,
-            )
-
-            # Update the plan with generated content
-            plan.content = result.content
-            plan.processing_status = ProcessingStatus.COMPLETED
-            plan.processing_error = None
-            db.commit()
-
-            logger.info(f"Plan generation completed for plan_id={plan_id}")
-
-        except (ClaudeNotConfiguredError, ClaudeGenerationError) as e:
-            logger.error(f"Plan generation failed for plan_id={plan_id}: {e}")
-            plan.processing_status = ProcessingStatus.FAILED
-            plan.processing_error = str(e)
-            db.commit()
-
-        except Exception as e:
-            logger.exception(f"Unexpected error during plan generation for plan_id={plan_id}")
-            plan.processing_status = ProcessingStatus.FAILED
-            plan.processing_error = f"Unexpected error: {e}"
-            db.commit()
-
-    finally:
-        db.close()
-        engine.dispose()
-
-
 @router.post(
     "/plans/{plan_id}/generate",
     response_model=PlanGenerationStatus,
@@ -322,8 +260,9 @@ async def generate_plan_content(
             detail="Plan content generation already in progress",
         )
 
-    # Check if there's an active task
-    if is_task_running(plan_id):
+    # Check if there's an active job in the queue
+    job_id = f"plan_gen_{plan_id}"
+    if await is_job_running(job_id):
         raise HTTPException(
             status_code=409,
             detail="Plan content generation already in progress",
@@ -343,19 +282,12 @@ async def generate_plan_content(
     # Get context from request
     context = request.context if request else None
 
-    # Get database URL for background task
-    from app.config import settings
-
-    # Start background generation task
-    submit_task(
-        plan_id,
-        _run_plan_generation(
-            plan_id=plan_id,
-            title=plan.title,
-            context=context,
-            project_context=project_context,
-            database_url=settings.database_url,
-        ),
+    # Submit to ARQ queue for background processing
+    await submit_plan_generation(
+        plan_id=plan_id,
+        title=plan.title,
+        context=context,
+        project_context=project_context,
     )
 
     return PlanGenerationStatus(
@@ -392,94 +324,6 @@ async def get_plan_generation_status(
         processing_error=plan.processing_error,
         content=plan.content,
     )
-
-
-async def _run_task_spawning(
-    plan_id: UUID,
-    title: str,
-    content: str,
-    project_id: UUID,
-    project_context: str | None,
-    database_url: str,
-) -> None:
-    """Background task to generate and create tasks from a plan.
-
-    This runs in the background and creates tasks directly in the database.
-    """
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    # Create a new database session for the background task
-    engine = create_engine(database_url)
-    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-
-    db = SessionLocal()
-    try:
-        # Get the plan
-        plan = db.query(PlanModel).filter(PlanModel.id == plan_id).first()
-        if not plan:
-            logger.error(f"Plan {plan_id} not found during task spawning")
-            return
-
-        try:
-            # Generate tasks using Claude
-            result = await claude_service.generate_tasks(
-                plan_id=plan_id,
-                title=title,
-                content=content,
-                project_context=project_context,
-            )
-
-            # Create tasks in the database
-            created_tasks: list[TaskModel] = []
-            for i, generated_task in enumerate(result.tasks):
-                new_task = TaskModel(
-                    project_id=project_id,
-                    plan_id=plan_id,
-                    title=generated_task.title,
-                    description=generated_task.description,
-                )
-                db.add(new_task)
-                db.flush()  # Flush to get the ID
-                created_tasks.append(new_task)
-
-            # Now set up blocking relationships using the actual task IDs
-            for i, generated_task in enumerate(result.tasks):
-                if generated_task.blocked_by_indices:
-                    blocking_tasks = [
-                        created_tasks[idx]
-                        for idx in generated_task.blocked_by_indices
-                        if idx < len(created_tasks)
-                    ]
-                    created_tasks[i].blocked_by = blocking_tasks
-                    # Set status to BLOCKED if there are blockers
-                    if blocking_tasks:
-                        created_tasks[i].status = ModelPlanTaskStatus.BLOCKED
-
-            # Update plan processing status
-            plan.processing_status = ProcessingStatus.COMPLETED
-            plan.processing_error = None
-            db.commit()
-
-            logger.info(
-                f"Task spawning completed for plan_id={plan_id}, created {len(created_tasks)} tasks"
-            )
-
-        except (ClaudeNotConfiguredError, ClaudeGenerationError) as e:
-            logger.error(f"Task spawning failed for plan_id={plan_id}: {e}")
-            plan.processing_status = ProcessingStatus.FAILED
-            plan.processing_error = str(e)
-            db.commit()
-
-        except Exception as e:
-            logger.exception(f"Unexpected error during task spawning for plan_id={plan_id}")
-            plan.processing_status = ProcessingStatus.FAILED
-            plan.processing_error = f"Unexpected error: {e}"
-            db.commit()
-
-    finally:
-        db.close()
-        engine.dispose()
 
 
 @router.post(
@@ -535,8 +379,9 @@ async def spawn_tasks_from_plan(
             detail="Task spawning already in progress",
         )
 
-    # Check if there's an active task
-    if is_task_running(plan_id):
+    # Check if there's an active job in the queue
+    job_id = f"task_spawn_{plan_id}"
+    if await is_job_running(job_id):
         raise HTTPException(
             status_code=409,
             detail="Task spawning already in progress",
@@ -553,20 +398,13 @@ async def spawn_tasks_from_plan(
     if project.description:
         project_context += f"\nDescription: {project.description}"
 
-    # Get database URL for background task
-    from app.config import settings
-
-    # Start background task spawning
-    submit_task(
-        plan_id,
-        _run_task_spawning(
-            plan_id=plan_id,
-            title=plan.title,
-            content=plan.content,
-            project_id=plan.project_id,
-            project_context=project_context,
-            database_url=settings.database_url,
-        ),
+    # Submit to ARQ queue for background processing
+    await submit_task_spawning(
+        plan_id=plan_id,
+        title=plan.title,
+        content=plan.content,
+        project_id=plan.project_id,
+        project_context=project_context,
     )
 
     return SpawnTasksStatus(
