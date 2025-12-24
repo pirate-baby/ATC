@@ -1,4 +1,4 @@
-// Plan status enum matching backend PlanTaskStatus
+// Plan status enum - matches backend PlanTaskStatus
 export type PlanStatus =
   | 'backlog'
   | 'blocked'
@@ -9,9 +9,30 @@ export type PlanStatus =
   | 'merged'
   | 'closed'
 
-// Processing status for AI-generated content
-export type ProcessingStatus = 'pending' | 'generating' | 'completed' | 'failed'
+// Enum version for easier usage with switch statements
+export enum PlanTaskStatus {
+  BACKLOG = 'backlog',
+  BLOCKED = 'blocked',
+  CODING = 'coding',
+  REVIEW = 'review',
+  APPROVED = 'approved',
+  CICD = 'cicd',
+  MERGED = 'merged',
+  CLOSED = 'closed',
+}
 
+// Processing status for AI-generated content
+export type ProcessingStatusType = 'pending' | 'generating' | 'completed' | 'failed'
+
+// Enum version for easier usage
+export enum ProcessingStatus {
+  PENDING = 'pending',
+  GENERATING = 'generating',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
+// Base plan interface
 export interface Plan {
   id: string
   project_id: string
@@ -27,6 +48,7 @@ export interface Plan {
   updated_at: string | null
 }
 
+// Summary interfaces for related entities
 export interface TaskSummary {
   id: string
   title: string
@@ -46,21 +68,65 @@ export interface ThreadSummary {
   comment_count: number
 }
 
+// Plan with all related entities
 export interface PlanWithDetails extends Plan {
   tasks: TaskSummary[]
   reviews: ReviewSummary[]
   threads: ThreadSummary[]
 }
 
+// Request to create a plan
 export interface PlanCreate {
   title: string
   content?: string | null
   parent_task_id?: string | null
 }
 
+// Request to update a plan
 export interface PlanUpdate {
   title?: string
   content?: string | null
+}
+
+// Request to generate plan content
+export interface PlanGenerateRequest {
+  context?: string | null
+}
+
+// Response from generation status endpoint
+export interface PlanGenerationStatus {
+  plan_id: string
+  processing_status: ProcessingStatus | null
+  processing_error: string | null
+  content: string | null
+}
+
+// Request to spawn tasks from a plan
+export interface SpawnTasksRequest {
+  // No additional parameters needed
+}
+
+// Summary of a spawned task
+export interface SpawnedTaskSummary {
+  id: string
+  title: string
+  description: string | null
+  blocked_by: string[]
+}
+
+// Response from spawning tasks
+export interface SpawnTasksResponse {
+  plan_id: string
+  tasks_created: number
+  tasks: SpawnedTaskSummary[]
+}
+
+// Status response for task spawning
+export interface SpawnTasksStatus {
+  plan_id: string
+  processing_status: ProcessingStatus | null
+  processing_error: string | null
+  tasks_created: number | null
 }
 
 // For the status filter dropdown
@@ -96,8 +162,27 @@ export const PROCESSING_STATUS_CONFIG: Record<
   ProcessingStatus,
   { label: string; color: string; bgColor: string }
 > = {
-  pending: { label: 'Pending', color: '#6b7280', bgColor: '#f3f4f6' },
-  generating: { label: 'Generating...', color: '#2563eb', bgColor: '#eff6ff' },
-  completed: { label: 'Generated', color: '#059669', bgColor: '#ecfdf5' },
-  failed: { label: 'Failed', color: '#dc2626', bgColor: '#fef2f2' },
+  [ProcessingStatus.PENDING]: { label: 'Pending', color: '#6b7280', bgColor: '#f3f4f6' },
+  [ProcessingStatus.GENERATING]: { label: 'Generating...', color: '#2563eb', bgColor: '#eff6ff' },
+  [ProcessingStatus.COMPLETED]: { label: 'Generated', color: '#059669', bgColor: '#ecfdf5' },
+  [ProcessingStatus.FAILED]: { label: 'Failed', color: '#dc2626', bgColor: '#fef2f2' },
+}
+
+// Helper type for display purposes (enum-based labels)
+export const PlanTaskStatusLabels: Record<PlanTaskStatus, string> = {
+  [PlanTaskStatus.BACKLOG]: 'Backlog',
+  [PlanTaskStatus.BLOCKED]: 'Blocked',
+  [PlanTaskStatus.CODING]: 'Coding',
+  [PlanTaskStatus.REVIEW]: 'Review',
+  [PlanTaskStatus.APPROVED]: 'Approved',
+  [PlanTaskStatus.CICD]: 'CI/CD',
+  [PlanTaskStatus.MERGED]: 'Merged',
+  [PlanTaskStatus.CLOSED]: 'Closed',
+}
+
+export const ProcessingStatusLabels: Record<ProcessingStatus, string> = {
+  [ProcessingStatus.PENDING]: 'Pending',
+  [ProcessingStatus.GENERATING]: 'Generating...',
+  [ProcessingStatus.COMPLETED]: 'Completed',
+  [ProcessingStatus.FAILED]: 'Failed',
 }

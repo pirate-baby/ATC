@@ -1,10 +1,20 @@
-import { useState, useEffect, FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useState, useEffect, useCallback, FormEvent } from 'react'
+import { useParams } from 'react-router-dom'
 import { apiFetch, ApiError } from '../utils/api'
 import { LoadingSpinner } from '../components/LoadingSpinner'
-import type { Plan, PlanCreate, PlanStatus } from '../types/plan'
+import { PlanDetailView } from '../components/PlanDetailView'
 import type { PaginatedResponse } from '../types/project'
-import { PLAN_STATUS_OPTIONS, PLAN_STATUS_CONFIG, PROCESSING_STATUS_CONFIG } from '../types/plan'
+import {
+  Plan,
+  PlanWithDetails,
+  PlanStatus,
+  PlanCreate,
+  ProcessingStatus,
+  PLAN_STATUS_OPTIONS,
+  PLAN_STATUS_CONFIG,
+  PROCESSING_STATUS_CONFIG,
+} from '../types/plan'
+import './PlansPage.css'
 
 interface CreatePlanModalProps {
   isOpen: boolean
@@ -146,12 +156,12 @@ function ProcessingStatusIndicator({
   status,
   error,
 }: {
-  status: string | null
+  status: ProcessingStatus | null
   error: string | null
 }) {
   if (!status) return null
 
-  const config = PROCESSING_STATUS_CONFIG[status as keyof typeof PROCESSING_STATUS_CONFIG]
+  const config = PROCESSING_STATUS_CONFIG[status]
   if (!config) return null
 
   return (
@@ -163,7 +173,7 @@ function ProcessingStatusIndicator({
       }}
       title={error || undefined}
     >
-      {status === 'generating' && <span className="processing-spinner" />}
+      {status === ProcessingStatus.GENERATING && <span className="processing-spinner" />}
       {config.label}
     </span>
   )
@@ -172,14 +182,18 @@ function ProcessingStatusIndicator({
 export function PlansPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [plans, setPlans] = useState<Plan[]>([])
+  const [selectedPlan, setSelectedPlan] = useState<PlanWithDetails | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [statusFilter, setStatusFilter] = useState<PlanStatus | ''>('')
 
-  const fetchPlans = async (pageNum: number = 1, status: PlanStatus | '' = '') => {
+  const fetchPlans = useCallback(async (pageNum: number = 1, status: PlanStatus | '' = '') => {
+    if (!projectId) return
+
     setIsLoading(true)
     setError(null)
 
@@ -202,18 +216,37 @@ export function PlansPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [projectId])
 
   useEffect(() => {
     if (projectId) {
       fetchPlans(1, statusFilter)
     }
-  }, [projectId, statusFilter])
+  }, [projectId, statusFilter, fetchPlans])
+
+  const fetchPlanDetails = useCallback(async (planId: string) => {
+    setIsLoadingDetail(true)
+
+    try {
+      const data = await apiFetch<PlanWithDetails>(`/plans/${planId}`)
+      setSelectedPlan(data)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Failed to load plan details')
+      }
+    } finally {
+      setIsLoadingDetail(false)
+    }
+  }, [])
 
   const handlePlanCreated = (newPlan: Plan) => {
     setIsModalOpen(false)
     // Add the new plan to the top of the list
     setPlans((prev) => [newPlan, ...prev])
+    // Select the new plan to show its details
+    fetchPlanDetails(newPlan.id)
   }
 
   const handlePageChange = (newPage: number) => {
@@ -226,6 +259,28 @@ export function PlansPage() {
     setStatusFilter(newStatus)
     setPage(1)
   }
+
+  const handlePlanClick = (plan: Plan) => {
+    fetchPlanDetails(plan.id)
+  }
+
+  const handleClosePlanDetail = () => {
+    setSelectedPlan(null)
+  }
+
+  const handlePlanUpdated = useCallback(
+    (updatedPlan: Plan) => {
+      // Update the plan in the list
+      setPlans((prev) =>
+        prev.map((p) => (p.id === updatedPlan.id ? { ...p, ...updatedPlan } : p))
+      )
+      // Update the selected plan if it's the same one
+      if (selectedPlan?.id === updatedPlan.id) {
+        setSelectedPlan((prev) => (prev ? { ...prev, ...updatedPlan } : null))
+      }
+    },
+    [selectedPlan?.id]
+  )
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -261,8 +316,8 @@ export function PlansPage() {
   }
 
   return (
-    <div className="page-content">
-      <div className="page-header">
+    <div className="page-content plans-page">
+      <div className="page-header plans-page__header">
         <div>
           <h2>Plans</h2>
           <p className="page-subtitle">Manage project implementation plans</p>
@@ -300,108 +355,139 @@ export function PlansPage() {
         </div>
       </div>
 
-      {isLoading ? (
-        <LoadingSpinner message="Loading plans..." />
-      ) : error ? (
-        <div className="error-state">
-          <p>{error}</p>
-          <button className="btn btn-secondary" onClick={() => fetchPlans(page, statusFilter)}>
-            Try Again
-          </button>
-        </div>
-      ) : plans.length === 0 ? (
-        <div className="empty-state">
-          <svg
-            className="empty-state-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
+      {error && (
+        <div className="error-message plans-page__error">
+          {error}
+          <button
+            className="error-dismiss"
+            onClick={() => setError(null)}
+            aria-label="Dismiss"
           >
-            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3>{statusFilter ? 'No plans match this filter' : 'No plans yet'}</h3>
-          <p>
-            {statusFilter
-              ? 'Try a different status filter or create a new plan'
-              : 'Create your first plan to get started'}
-          </p>
-          <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-            Create Plan
+            ×
           </button>
         </div>
-      ) : (
-        <>
-          <div className="plans-list">
-            {plans.map((plan) => (
-              <Link
-                key={plan.id}
-                to={`/projects/${projectId}/plans/${plan.id}`}
-                className="plan-card"
-              >
-                <div className="plan-card-header">
-                  <div className="plan-card-title-row">
-                    <svg
-                      className="plan-icon"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <h3 className="plan-title">{plan.title}</h3>
-                  </div>
-                  <div className="plan-badges">
-                    <PlanStatusBadge status={plan.status} />
-                    <ProcessingStatusIndicator
-                      status={plan.processing_status}
-                      error={plan.processing_error}
-                    />
-                  </div>
-                </div>
-                {plan.content && (
-                  <div className="plan-card-body">
-                    <p className="plan-excerpt">
-                      {plan.content.length > 150
-                        ? plan.content.substring(0, 150) + '...'
-                        : plan.content}
-                    </p>
-                  </div>
-                )}
-                <div className="plan-card-footer">
-                  <span className="plan-meta">
-                    v{plan.version} • Created {formatRelativeTime(plan.created_at)}
-                    {plan.updated_at && ` • Updated ${formatRelativeTime(plan.updated_at)}`}
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
+      )}
 
-          {totalPages > 1 && (
-            <div className="pagination">
-              <button
-                className="pagination-btn"
-                onClick={() => handlePageChange(page - 1)}
-                disabled={page <= 1}
+      <div className="plans-page__content">
+        {/* Plan List */}
+        <div className="plans-page__list-section">
+          {isLoading ? (
+            <LoadingSpinner message="Loading plans..." />
+          ) : plans.length === 0 ? (
+            <div className="empty-state plans-page__empty">
+              <svg
+                className="empty-state-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
               >
-                Previous
-              </button>
-              <span className="pagination-info">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                className="pagination-btn"
-                onClick={() => handlePageChange(page + 1)}
-                disabled={page >= totalPages}
-              >
-                Next
+                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <h3>{statusFilter ? 'No plans match this filter' : 'No plans yet'}</h3>
+              <p>
+                {statusFilter
+                  ? 'Try a different status filter or create a new plan'
+                  : 'Create your first plan to get started'}
+              </p>
+              <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+                Create Plan
               </button>
             </div>
+          ) : (
+            <>
+              <div className="plans-list">
+                {plans.map((plan) => (
+                  <div
+                    key={plan.id}
+                    className={`plan-card ${selectedPlan?.id === plan.id ? 'plan-card--selected' : ''}`}
+                    onClick={() => handlePlanClick(plan)}
+                  >
+                    <div className="plan-card-header">
+                      <div className="plan-card-title-row">
+                        <svg
+                          className="plan-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <h3 className="plan-title">{plan.title}</h3>
+                      </div>
+                      <div className="plan-badges">
+                        <PlanStatusBadge status={plan.status} />
+                        <ProcessingStatusIndicator
+                          status={plan.processing_status}
+                          error={plan.processing_error}
+                        />
+                      </div>
+                    </div>
+                    {plan.content && (
+                      <div className="plan-card-body">
+                        <p className="plan-excerpt">
+                          {plan.content.length > 150
+                            ? plan.content.substring(0, 150) + '...'
+                            : plan.content}
+                        </p>
+                      </div>
+                    )}
+                    <div className="plan-card-footer">
+                      <span className="plan-meta">
+                        v{plan.version} • Created {formatRelativeTime(plan.created_at)}
+                        {plan.updated_at && ` • Updated ${formatRelativeTime(plan.updated_at)}`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="pagination plans-page__pagination">
+                  <button
+                    className="pagination-btn btn btn-secondary btn-small"
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    Previous
+                  </button>
+                  <span className="pagination-info plans-page__page-info">
+                    Page {page} of {totalPages}
+                  </span>
+                  <button
+                    className="pagination-btn btn btn-secondary btn-small"
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
+
+        {/* Plan Detail View */}
+        <div className="plans-page__detail-section">
+          {isLoadingDetail && <LoadingSpinner message="Loading plan..." />}
+
+          {!isLoadingDetail && selectedPlan && (
+            <PlanDetailView
+              plan={selectedPlan}
+              onPlanUpdated={handlePlanUpdated}
+              onClose={handleClosePlanDetail}
+            />
+          )}
+
+          {!isLoadingDetail && !selectedPlan && plans.length > 0 && (
+            <div className="plans-page__no-selection">
+              <div className="plans-page__no-selection-icon">👈</div>
+              <p>Select a plan from the list to view details and generate content</p>
+            </div>
+          )}
+        </div>
+      </div>
 
       <CreatePlanModal
         isOpen={isModalOpen}
