@@ -1,54 +1,45 @@
-import { useState, useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { UserProfile } from './components/UserProfile'
+import { AppLayout } from './components/AppLayout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { LoginPage } from './pages/LoginPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { ProjectsPage } from './pages/ProjectsPage'
+import { ProjectDetailPage } from './pages/ProjectDetailPage'
+import { PlansPage } from './pages/PlansPage'
+import { TasksPage } from './pages/TasksPage'
 import './App.css'
-
-function Dashboard() {
-  const [health, setHealth] = useState<string>('checking...')
-
-  useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-    fetch(`${apiUrl}/health`)
-      .then((res) => res.json())
-      .then((data) => setHealth(data.status))
-      .catch(() => setHealth('error'))
-  }, [])
-
-  return (
-    <div className="dashboard">
-      <header className="header">
-        <h1>ATC - Automated Team Collaboration</h1>
-        <UserProfile />
-      </header>
-      <main className="main-content">
-        <p>Backend Status: {health}</p>
-      </main>
-    </div>
-  )
-}
 
 function App() {
   return (
-    <AuthProvider>
-      <div className="App">
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/auth/callback" element={<AuthCallbackPage />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </div>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <div className="App">
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/auth/callback" element={<AuthCallbackPage />} />
+
+            {/* Protected routes with layout */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/projects" element={<ProjectsPage />} />
+              <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+              <Route path="/projects/:projectId/plans" element={<PlansPage />} />
+              <Route path="/projects/:projectId/tasks" element={<TasksPage />} />
+            </Route>
+          </Routes>
+        </div>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 
