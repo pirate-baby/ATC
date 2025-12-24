@@ -7,7 +7,11 @@ interface BreadcrumbItem {
 
 export function Breadcrumbs() {
   const location = useLocation()
-  const { projectId } = useParams<{ projectId: string }>()
+  const { projectId, planId, taskId } = useParams<{
+    projectId: string
+    planId: string
+    taskId: string
+  }>()
 
   const breadcrumbs: BreadcrumbItem[] = []
 
@@ -30,11 +34,27 @@ export function Breadcrumbs() {
           label: 'Plans',
           path: `/projects/${projectId}/plans`,
         })
+
+        // Add plan detail breadcrumb if viewing a specific plan
+        if (planId) {
+          breadcrumbs.push({
+            label: `Plan ${planId.slice(0, 8)}...`,
+            path: `/projects/${projectId}/plans/${planId}`,
+          })
+        }
       } else if (pathParts[2] === 'tasks') {
         breadcrumbs.push({
           label: 'Tasks',
           path: `/projects/${projectId}/tasks`,
         })
+
+        // Add task detail breadcrumb if viewing a specific task
+        if (taskId) {
+          breadcrumbs.push({
+            label: `Task ${taskId.slice(0, 8)}...`,
+            path: `/projects/${projectId}/tasks/${taskId}`,
+          })
+        }
       }
     }
   }
