@@ -1,0 +1,124 @@
+.start-coding-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+}
+
+.start-coding-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+}
+
+.start-coding-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.start-coding-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.start-coding-button--starting {
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+}
+
+.start-coding-button__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: start-coding-spin 0.8s linear infinite;
+}
+
+@keyframes start-coding-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.start-coding-button__icon {
+  font-size: 0.875rem;
+}
+
+/* Shared modal styles for session actions */
+.session-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.session-modal {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 480px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.session-modal__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  color: var(--text-primary);
+}
+
+.session-modal__body {
+  margin-bottom: 1.5rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.session-modal__body p {
+  margin: 0 0 0.75rem;
+}
+
+.session-modal__list {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.5rem;
+}
+
+.session-modal__list li {
+  margin-bottom: 0.375rem;
+}
+
+.session-modal__note {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+.session-modal__warning {
+  color: #b91c1c;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background-color: #fee2e2;
+  border-radius: 6px;
+}
+
+.session-modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}

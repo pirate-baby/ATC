@@ -1,0 +1,119 @@
+.session-info {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.session-info__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.session-info__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.session-info__icon {
+  font-size: 0.875rem;
+}
+
+.session-info__status {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+}
+
+.session-info__status--active {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.session-info__status--ended {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.session-info__details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.session-info__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.session-info__label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.session-info__value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.session-info__code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  color: #166534;
+  word-break: break-all;
+}
+
+.session-info__code--path {
+  font-size: 0.75rem;
+  color: #374151;
+}
+
+.session-info__copy-btn {
+  flex-shrink: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: #059669;
+  background-color: white;
+  border: 1px solid #a7f3d0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.session-info__copy-btn:hover {
+  background-color: #ecfdf5;
+  border-color: #6ee7b7;
+}
+
+.session-info__value {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+/* Variant for ended sessions */
+.session-info--ended {
+  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  border-color: #e5e7eb;
+}
+
+.session-info--ended .session-info__code {
+  color: #6b7280;
+}

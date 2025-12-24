@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiFetch, ApiError } from '../utils/api'
 import { LoadingSpinner } from '../components/LoadingSpinner'
+import { StartCodingButton } from '../components/StartCodingButton'
+import { EndSessionButton } from '../components/EndSessionButton'
+import { SessionInfo } from '../components/SessionInfo'
+import { useSession } from '../hooks/useSession'
 import {
   TaskWithDetails,
   TaskStatus,
@@ -39,6 +43,7 @@ export function TaskDetailPage() {
   const [task, setTask] = useState<TaskWithDetails | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sessionError, setSessionError] = useState<string | null>(null)
 
   const fetchTask = useCallback(async () => {
     if (!taskId) return
@@ -59,6 +64,38 @@ export function TaskDetailPage() {
       setIsLoading(false)
     }
   }, [taskId])
+
+  const {
+    isStarting,
+    isEnding,
+    startSession,
+    endSession,
+  } = useSession({
+    onSessionStarted: () => {
+      setSessionError(null)
+      fetchTask() // Refresh task to get updated status
+    },
+    onSessionEnded: () => {
+      setSessionError(null)
+      fetchTask() // Refresh task to get updated status
+    },
+    onError: (err) => {
+      setSessionError(err)
+    },
+  })
+
+  const handleStartCoding = useCallback(async () => {
+    if (!taskId) return
+    await startSession(taskId)
+  }, [taskId, startSession])
+
+  const handleEndSession = useCallback(
+    async (force: boolean) => {
+      if (!taskId) return
+      await endSession(taskId, force)
+    },
+    [taskId, endSession]
+  )
 
   useEffect(() => {
     fetchTask()
@@ -147,11 +184,52 @@ export function TaskDetailPage() {
             )}
           </div>
         </div>
+        <div className="task-detail-page__actions">
+          {/* Show Start Coding button for BACKLOG tasks */}
+          {task.status === 'backlog' && (
+            <StartCodingButton
+              onStartCoding={handleStartCoding}
+              isStarting={isStarting}
+              disabled={task.blocked_by.length > 0}
+            />
+          )}
+          {/* Show End Session button for CODING tasks with active worktree */}
+          {task.status === 'coding' && task.worktree_path && (
+            <EndSessionButton
+              onEndSession={handleEndSession}
+              isEnding={isEnding}
+            />
+          )}
+        </div>
       </div>
+
+      {/* Session Error */}
+      {sessionError && (
+        <div className="task-detail-page__session-error">
+          <span>{sessionError}</span>
+          <button
+            className="error-dismiss"
+            onClick={() => setSessionError(null)}
+            aria-label="Dismiss"
+          >
+            x
+          </button>
+        </div>
+      )}
 
       <div className="task-detail-page__content">
         {/* Main Content */}
         <div className="task-detail-page__main">
+          {/* Session Info - shown when task has session data */}
+          {(task.branch_name || task.worktree_path || task.active_session) && (
+            <SessionInfo
+              branchName={task.branch_name}
+              worktreePath={task.worktree_path}
+              startedAt={task.active_session?.started_at || null}
+              isActive={task.status === 'coding' && !!task.worktree_path}
+            />
+          )}
+
           {/* Metadata Card */}
           <div className="task-card-section">
             <div className="task-meta-grid">

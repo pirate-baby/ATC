@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiFetch, ApiError } from '../utils/api'
 import { LoadingSpinner } from '../components/LoadingSpinner'
+import { StartCodingButton } from '../components/StartCodingButton'
+import { EndSessionButton } from '../components/EndSessionButton'
+import { useSession } from '../hooks/useSession'
 import type { PaginatedResponse } from '../types/project'
 import {
   Task,
@@ -53,6 +56,16 @@ function TaskDependencyBadge({
   )
 }
 
+function SessionIndicator({ hasWorktree }: { hasWorktree: boolean }) {
+  if (!hasWorktree) return null
+
+  return (
+    <span className="task-session-indicator" title="Active coding session">
+      Active Session
+    </span>
+  )
+}
+
 export function TasksPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [tasks, setTasks] = useState<Task[]>([])
@@ -60,6 +73,7 @@ export function TasksPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sessionError, setSessionError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | ''>('')
@@ -115,6 +129,50 @@ export function TasksPage() {
     } finally {
       setIsLoadingDetail(false)
     }
+  }, [])
+
+  // Session management
+  const {
+    isStarting,
+    isEnding,
+    startSession,
+    endSession,
+  } = useSession({
+    onSessionStarted: () => {
+      setSessionError(null)
+      // Refresh both task list and selected task
+      fetchTasks(page, statusFilter)
+      if (selectedTask) {
+        fetchTaskDetails(selectedTask.id)
+      }
+    },
+    onSessionEnded: () => {
+      setSessionError(null)
+      fetchTasks(page, statusFilter)
+      if (selectedTask) {
+        fetchTaskDetails(selectedTask.id)
+      }
+    },
+    onError: (err) => {
+      setSessionError(err)
+    },
+  })
+
+  const handleStartCoding = useCallback(async () => {
+    if (!selectedTask) return
+    await startSession(selectedTask.id)
+  }, [selectedTask, startSession])
+
+  const handleEndSession = useCallback(
+    async (force: boolean) => {
+      if (!selectedTask) return
+      await endSession(selectedTask.id, force)
+    },
+    [selectedTask, endSession]
+  )
+
+  const handleClearSessionError = useCallback(() => {
+    setSessionError(null)
   }, [])
 
   const handlePageChange = (newPage: number) => {
@@ -280,6 +338,11 @@ export function TasksPage() {
                       </div>
                       <div className="task-badges">
                         <TaskStatusBadge status={task.status} />
+                        <SessionIndicator
+                          hasWorktree={
+                            task.status === 'coding' && !!task.worktree_path
+                          }
+                        />
                         <TaskDependencyBadge
                           count={task.blocked_by.length}
                           type="blocked_by"
@@ -363,6 +426,12 @@ export function TasksPage() {
               projectId={projectId}
               taskTitleMap={taskTitleMap}
               onClose={handleCloseTaskDetail}
+              onStartCoding={handleStartCoding}
+              onEndSession={handleEndSession}
+              isStarting={isStarting}
+              isEnding={isEnding}
+              sessionError={sessionError}
+              onClearSessionError={handleClearSessionError}
             />
           )}
 
@@ -383,6 +452,12 @@ interface TaskDetailPanelProps {
   projectId: string
   taskTitleMap: Map<string, string>
   onClose: () => void
+  onStartCoding: () => Promise<void>
+  onEndSession: (force: boolean) => Promise<void>
+  isStarting: boolean
+  isEnding: boolean
+  sessionError: string | null
+  onClearSessionError: () => void
 }
 
 function TaskDetailPanel({
@@ -390,6 +465,12 @@ function TaskDetailPanel({
   projectId,
   taskTitleMap,
   onClose,
+  onStartCoding,
+  onEndSession,
+  isStarting,
+  isEnding,
+  sessionError,
+  onClearSessionError,
 }: TaskDetailPanelProps) {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -418,6 +499,9 @@ function TaskDetailPanel({
             >
               {config.label}
             </span>
+            {task.status === 'coding' && task.worktree_path && (
+              <span className="task-session-indicator">Active Session</span>
+            )}
           </div>
         </div>
         <div className="task-detail__actions">
@@ -432,6 +516,39 @@ function TaskDetailPanel({
           </button>
         </div>
       </div>
+
+      {/* Session Actions */}
+      {(task.status === 'backlog' || (task.status === 'coding' && task.worktree_path)) && (
+        <div className="task-detail__session-actions">
+          {task.status === 'backlog' && (
+            <StartCodingButton
+              onStartCoding={onStartCoding}
+              isStarting={isStarting}
+              disabled={task.blocked_by.length > 0}
+            />
+          )}
+          {task.status === 'coding' && task.worktree_path && (
+            <EndSessionButton
+              onEndSession={onEndSession}
+              isEnding={isEnding}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Session Error */}
+      {sessionError && (
+        <div className="task-detail__session-error">
+          <span>{sessionError}</span>
+          <button
+            className="error-dismiss"
+            onClick={onClearSessionError}
+            aria-label="Dismiss"
+          >
+            x
+          </button>
+        </div>
+      )}
 
       <div className="task-detail__meta">
         <div className="task-detail__meta-item">

@@ -1,0 +1,52 @@
+.end-session-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);
+}
+
+.end-session-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3);
+}
+
+.end-session-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.end-session-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.end-session-button--ending {
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+}
+
+.end-session-button__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: end-session-spin 0.8s linear infinite;
+}
+
+@keyframes end-session-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.end-session-button__icon {
+  font-size: 0.75rem;
+}

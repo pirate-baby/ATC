@@ -37,12 +37,20 @@ export interface Task {
   updated_at: string | null
 }
 
+// Session summary for active coding session
+export interface SessionSummary {
+  id: string
+  status: string
+  started_at: string
+}
+
 // Task with related entities for detail view
 export interface TaskWithDetails extends Task {
   blocking_tasks: TaskSummary[] // Tasks that this task blocks
   blocked_by_tasks: TaskSummary[] // Tasks blocking this task
   plan: PlanSummary | null
   reviews: ReviewSummary[]
+  active_session: SessionSummary | null
 }
 
 // Summary for lists and references
