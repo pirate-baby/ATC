@@ -475,6 +475,7 @@ export function PlansPage() {
           {!isLoadingDetail && selectedPlan && (
             <PlanDetailView
               plan={selectedPlan}
+              projectId={projectId}
               onPlanUpdated={handlePlanUpdated}
               onClose={handleClosePlanDetail}
             />

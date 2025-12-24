@@ -6,3 +6,9 @@ export type {
   UsePlanGenerationOptions,
   UsePlanGenerationResult,
 } from './usePlanGeneration'
+
+export { useSpawnTasks } from './useSpawnTasks'
+export type {
+  UseSpawnTasksOptions,
+  UseSpawnTasksResult,
+} from './useSpawnTasks'
