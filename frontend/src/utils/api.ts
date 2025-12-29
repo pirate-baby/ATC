@@ -1,4 +1,9 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Use relative URLs when VITE_API_URL is empty or not set (goes through nginx proxy)
+// Only use direct backend URL for local development without nginx
+const API_URL =
+  typeof import.meta.env.VITE_API_URL === 'string'
+    ? import.meta.env.VITE_API_URL || '/api/v1'
+    : 'http://localhost:8000/api/v1'
 const TOKEN_KEY = 'atc_token'
 
 interface FetchOptions extends RequestInit {

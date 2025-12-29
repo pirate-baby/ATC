@@ -8,7 +8,12 @@ import {
 } from 'react'
 
 const TOKEN_KEY = 'atc_token'
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Use relative URLs when VITE_API_URL is empty or not set (goes through nginx proxy)
+// Only use direct backend URL for local development without nginx
+const API_URL =
+  typeof import.meta.env.VITE_API_URL === 'string'
+    ? import.meta.env.VITE_API_URL || '/api/v1'
+    : 'http://localhost:8000/api/v1'
 
 export interface User {
   id: string
@@ -52,7 +57,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const fetchUser = useCallback(async (authToken: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/v1/users/me`, {
+      const response = await fetch(`${API_URL}/users/me`, {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -87,7 +92,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = async () => {
     const callbackUrl = `${window.location.origin}/auth/callback`
     const response = await fetch(
-      `${API_URL}/api/v1/auth/github?redirect_uri=${encodeURIComponent(callbackUrl)}`
+      `${API_URL}/auth/github?redirect_uri=${encodeURIComponent(callbackUrl)}`
     )
 
     if (!response.ok) {
@@ -108,7 +113,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const callbackUrl = `${window.location.origin}/auth/callback`
     const response = await fetch(
-      `${API_URL}/api/v1/auth/github/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(callbackUrl)}`
+      `${API_URL}/auth/github/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(callbackUrl)}`
     )
 
     if (!response.ok) {

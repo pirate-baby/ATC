@@ -192,7 +192,7 @@
 }
 
 .task-meta-code {
-  font-family: 'SF Mono', Monaco, 'Andale Mono', monospace;
+  font-family: "SF Mono", Monaco, "Andale Mono", monospace;
   font-size: 0.8rem;
   color: #7c3aed;
   background-color: #f5f3ff;
@@ -382,12 +382,17 @@
 .dep-graph__arrow {
   width: 2px;
   height: 24px;
-  background: linear-gradient(to bottom, var(--border-color), var(--primary-color), var(--border-color));
+  background: linear-gradient(
+    to bottom,
+    var(--border-color),
+    var(--primary-color),
+    var(--border-color)
+  );
   position: relative;
 }
 
 .dep-graph__arrow--down::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: 0;
   left: 50%;
@@ -464,4 +469,44 @@
 
 .task-detail-page__session-error .error-dismiss:hover {
   opacity: 1;
+}
+
+/* Diff Toggle Button */
+.task-detail-page__diff-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.task-detail-page__diff-toggle.active {
+  background-color: #dbeafe;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.task-detail-page__diff-stats {
+  display: inline-flex;
+  gap: 0.375rem;
+  font-family: "SF Mono", Monaco, "Consolas", monospace;
+  font-size: 0.75rem;
+  margin-left: 0.25rem;
+}
+
+.diff-stat-add {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.diff-stat-del {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+/* Diff Section */
+.task-detail-page__diff-section {
+  margin-bottom: 2rem;
+  max-height: 70vh;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }

@@ -20,8 +20,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create enum types
-    job_status_enum = sa.Enum(
+    # Create enum type first (with create_type=False to prevent auto-creation in table)
+    job_status_enum = postgresql.ENUM(
         "queued",
         "running",
         "completed",
@@ -29,7 +29,7 @@ def upgrade() -> None:
         "retrying",
         "cancelled",
         name="job_status",
-        create_type=True,
+        create_type=False,
     )
     job_status_enum.create(op.get_bind(), checkfirst=True)
 

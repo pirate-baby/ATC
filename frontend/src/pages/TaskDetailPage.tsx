@@ -1,26 +1,24 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { apiFetch, ApiError } from '../utils/api'
-import { LoadingSpinner } from '../components/LoadingSpinner'
-import { StartCodingButton } from '../components/StartCodingButton'
-import { EndSessionButton } from '../components/EndSessionButton'
-import { SessionInfo } from '../components/SessionInfo'
-import { useSession } from '../hooks/useSession'
-import {
-  TaskWithDetails,
-  TaskStatus,
-  TASK_STATUS_CONFIG,
-} from '../types/task'
-import './TaskDetailPage.css'
+import { useState, useEffect, useCallback } from "react";
+import { useParams, Link } from "react-router-dom";
+import { apiFetch, ApiError } from "../utils/api";
+import { LoadingSpinner } from "../components/LoadingSpinner";
+import { StartCodingButton } from "../components/StartCodingButton";
+import { EndSessionButton } from "../components/EndSessionButton";
+import { SessionInfo } from "../components/SessionInfo";
+import { DiffViewer } from "../components/DiffViewer";
+import { useSession } from "../hooks/useSession";
+import { useDiff } from "../hooks";
+import { TaskWithDetails, TaskStatus, TASK_STATUS_CONFIG } from "../types/task";
+import "./TaskDetailPage.css";
 
 function TaskStatusBadge({
   status,
-  size = 'normal',
+  size = "normal",
 }: {
-  status: TaskStatus
-  size?: 'normal' | 'large'
+  status: TaskStatus;
+  size?: "normal" | "large";
 }) {
-  const config = TASK_STATUS_CONFIG[status]
+  const config = TASK_STATUS_CONFIG[status];
   return (
     <span
       className={`task-status-badge task-status-badge--${size}`}
@@ -32,84 +30,98 @@ function TaskStatusBadge({
     >
       {config.label}
     </span>
-  )
+  );
 }
 
 export function TaskDetailPage() {
   const { projectId, taskId } = useParams<{
-    projectId: string
-    taskId: string
-  }>()
-  const [task, setTask] = useState<TaskWithDetails | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [sessionError, setSessionError] = useState<string | null>(null)
+    projectId: string;
+    taskId: string;
+  }>();
+  const [task, setTask] = useState<TaskWithDetails | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
 
   const fetchTask = useCallback(async () => {
-    if (!taskId) return
+    if (!taskId) return;
 
-    setIsLoading(true)
-    setError(null)
+    setIsLoading(true);
+    setError(null);
 
     try {
-      const data = await apiFetch<TaskWithDetails>(`/tasks/${taskId}`)
-      setTask(data)
+      const data = await apiFetch<TaskWithDetails>(`/tasks/${taskId}`);
+      setTask(data);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setError(err.message);
       } else {
-        setError('Failed to load task')
+        setError("Failed to load task");
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [taskId])
+  }, [taskId]);
 
-  const {
-    isStarting,
-    isEnding,
-    startSession,
-    endSession,
-  } = useSession({
+  const { isStarting, isEnding, startSession, endSession } = useSession({
     onSessionStarted: () => {
-      setSessionError(null)
-      fetchTask() // Refresh task to get updated status
+      setSessionError(null);
+      fetchTask(); // Refresh task to get updated status
     },
     onSessionEnded: () => {
-      setSessionError(null)
-      fetchTask() // Refresh task to get updated status
+      setSessionError(null);
+      fetchTask(); // Refresh task to get updated status
     },
     onError: (err) => {
-      setSessionError(err)
+      setSessionError(err);
     },
-  })
+  });
+
+  // Diff viewer hook - only enabled when task has a branch
+  const {
+    diff,
+    isLoading: isDiffLoading,
+    error: diffError,
+    fetchDiff,
+  } = useDiff({
+    taskId: taskId || "",
+    includeLines: true,
+  });
 
   const handleStartCoding = useCallback(async () => {
-    if (!taskId) return
-    await startSession(taskId)
-  }, [taskId, startSession])
+    if (!taskId) return;
+    await startSession(taskId);
+  }, [taskId, startSession]);
 
   const handleEndSession = useCallback(
     async (force: boolean) => {
-      if (!taskId) return
-      await endSession(taskId, force)
+      if (!taskId) return;
+      await endSession(taskId, force);
     },
-    [taskId, endSession]
-  )
+    [taskId, endSession],
+  );
 
   useEffect(() => {
-    fetchTask()
-  }, [fetchTask])
+    fetchTask();
+  }, [fetchTask]);
+
+  // Fetch diff when the diff panel is opened and task has a branch
+  useEffect(() => {
+    if (showDiff && task?.branch_name && !diff && !isDiffLoading) {
+      fetchDiff();
+    }
+  }, [showDiff, task?.branch_name, diff, isDiffLoading, fetchDiff]);
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   if (!projectId || !taskId) {
     return (
@@ -118,7 +130,7 @@ export function TaskDetailPage() {
           <p>Project ID and Task ID are required</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (isLoading) {
@@ -126,7 +138,7 @@ export function TaskDetailPage() {
       <div className="page-content">
         <LoadingSpinner message="Loading task..." />
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -140,7 +152,7 @@ export function TaskDetailPage() {
           </button>
         </div>
       </div>
-    )
+    );
   }
 
   if (!task) {
@@ -154,10 +166,10 @@ export function TaskDetailPage() {
           </Link>
         </div>
       </div>
-    )
+    );
   }
 
-  const config = TASK_STATUS_CONFIG[task.status]
+  const config = TASK_STATUS_CONFIG[task.status];
 
   return (
     <div className="page-content task-detail-page">
@@ -179,14 +191,29 @@ export function TaskDetailPage() {
             {task.blocked_by.length > 0 && (
               <span className="task-detail-page__blocked-badge">
                 Blocked by {task.blocked_by.length} task
-                {task.blocked_by.length !== 1 ? 's' : ''}
+                {task.blocked_by.length !== 1 ? "s" : ""}
               </span>
             )}
           </div>
         </div>
         <div className="task-detail-page__actions">
+          {/* Show View Changes button when task has a branch */}
+          {task.branch_name && (
+            <button
+              className={`btn btn-secondary task-detail-page__diff-toggle ${showDiff ? "active" : ""}`}
+              onClick={() => setShowDiff(!showDiff)}
+            >
+              {showDiff ? "Hide Changes" : "View Changes"}
+              {diff && (
+                <span className="task-detail-page__diff-stats">
+                  <span className="diff-stat-add">+{diff.total_additions}</span>
+                  <span className="diff-stat-del">-{diff.total_deletions}</span>
+                </span>
+              )}
+            </button>
+          )}
           {/* Show Start Coding button for BACKLOG tasks */}
-          {task.status === 'backlog' && (
+          {task.status === "backlog" && (
             <StartCodingButton
               onStartCoding={handleStartCoding}
               isStarting={isStarting}
@@ -194,7 +221,7 @@ export function TaskDetailPage() {
             />
           )}
           {/* Show End Session button for CODING tasks with active worktree */}
-          {task.status === 'coding' && task.worktree_path && (
+          {task.status === "coding" && task.worktree_path && (
             <EndSessionButton
               onEndSession={handleEndSession}
               isEnding={isEnding}
@@ -217,6 +244,18 @@ export function TaskDetailPage() {
         </div>
       )}
 
+      {/* Diff Viewer Section */}
+      {showDiff && task.branch_name && (
+        <div className="task-detail-page__diff-section">
+          <DiffViewer
+            diff={diff}
+            isLoading={isDiffLoading}
+            error={diffError}
+            onRetry={fetchDiff}
+          />
+        </div>
+      )}
+
       <div className="task-detail-page__content">
         {/* Main Content */}
         <div className="task-detail-page__main">
@@ -226,7 +265,7 @@ export function TaskDetailPage() {
               branchName={task.branch_name}
               worktreePath={task.worktree_path}
               startedAt={task.active_session?.started_at || null}
-              isActive={task.status === 'coding' && !!task.worktree_path}
+              isActive={task.status === "coding" && !!task.worktree_path}
             />
           )}
 
@@ -304,10 +343,7 @@ export function TaskDetailPage() {
           {/* Dependency Graph Visualization */}
           <div className="task-card-section task-dependency-graph">
             <h2 className="section-title">Dependencies</h2>
-            <DependencyGraph
-              task={task}
-              projectId={projectId}
-            />
+            <DependencyGraph task={task} projectId={projectId} />
           </div>
 
           {/* Blocked By */}
@@ -323,8 +359,8 @@ export function TaskDetailPage() {
               <ul className="task-dep-list">
                 {task.blocked_by.map((depId) => {
                   const depTask = task.blocked_by_tasks?.find(
-                    (t) => t.id === depId
-                  )
+                    (t) => t.id === depId,
+                  );
                   return (
                     <li key={depId} className="task-dep-item">
                       <Link
@@ -335,12 +371,10 @@ export function TaskDetailPage() {
                         <span className="task-dep-title">
                           {depTask?.title || depId}
                         </span>
-                        {depTask && (
-                          <TaskStatusBadge status={depTask.status} />
-                        )}
+                        {depTask && <TaskStatusBadge status={depTask.status} />}
                       </Link>
                     </li>
-                  )
+                  );
                 })}
               </ul>
             </div>
@@ -389,17 +423,17 @@ export function TaskDetailPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 interface DependencyGraphProps {
-  task: TaskWithDetails
-  projectId: string
+  task: TaskWithDetails;
+  projectId: string;
 }
 
 function DependencyGraph({ task, projectId }: DependencyGraphProps) {
-  const hasBlockedBy = task.blocked_by.length > 0
-  const hasBlocking = task.blocking_tasks && task.blocking_tasks.length > 0
+  const hasBlockedBy = task.blocked_by.length > 0;
+  const hasBlocking = task.blocking_tasks && task.blocking_tasks.length > 0;
 
   if (!hasBlockedBy && !hasBlocking) {
     return (
@@ -407,7 +441,7 @@ function DependencyGraph({ task, projectId }: DependencyGraphProps) {
         <span className="dep-graph-empty-icon"></span>
         <p>No dependencies</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -468,5 +502,5 @@ function DependencyGraph({ task, projectId }: DependencyGraphProps) {
         </div>
       )}
     </div>
-  )
+  );
 }

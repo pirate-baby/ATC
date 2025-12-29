@@ -7,7 +7,10 @@ export function DashboardPage() {
   const [health, setHealth] = useState<string>('checking...')
 
   useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const apiUrl =
+      typeof import.meta.env.VITE_API_URL === 'string'
+        ? import.meta.env.VITE_API_URL
+        : 'http://localhost:8000'
     fetch(`${apiUrl}/health`)
       .then((res) => res.json())
       .then((data) => setHealth(data.status))

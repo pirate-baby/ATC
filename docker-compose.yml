@@ -110,7 +110,9 @@ services:
   frontend:
     <<: *frontend-base
     environment:
-      VITE_API_URL: http://localhost:${PORT_OFFSET:-0}8000
+      # Empty string means API calls use relative URLs (go through nginx proxy)
+      # This avoids CORS issues when accessing via nginx on port 80
+      VITE_API_URL: ""
       WATCHPACK_POLLING: "true"  # Enable polling for Docker volume hot-reload
     depends_on:
       backend:
