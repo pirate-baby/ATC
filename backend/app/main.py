@@ -1,10 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import AuthMiddleware
+from app.config import settings
 from app.routers import (
     auth_router,
     comments_router,
@@ -24,10 +28,34 @@ from app.services.task_queue import close_redis_pool, get_redis_pool
 logger = logging.getLogger(__name__)
 
 
+def run_migrations() -> None:
+    """Run database migrations using Alembic."""
+    # Find the alembic.ini file relative to the backend directory
+    backend_dir = Path(__file__).parent.parent
+    alembic_ini_path = backend_dir / "alembic.ini"
+
+    if not alembic_ini_path.exists():
+        logger.warning(f"alembic.ini not found at {alembic_ini_path}, skipping migrations")
+        return
+
+    alembic_cfg = Config(str(alembic_ini_path))
+    # Set the script location relative to the alembic.ini file
+    alembic_cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    # Set the database URL from settings
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+
+    logger.info("Running database migrations...")
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Database migrations completed successfully")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan context manager for startup/shutdown events."""
     # Startup
+    # Run database migrations first
+    run_migrations()
+
     logger.info("Initializing Redis connection pool...")
     await get_redis_pool()
     logger.info("Redis connection pool initialized")

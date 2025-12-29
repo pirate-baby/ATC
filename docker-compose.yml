@@ -21,6 +21,8 @@ x-backend-base: &backend-base
   volumes:
     - ./backend/app:/app/app
     - ./backend/tests:/app/tests
+    - ./backend/alembic:/app/alembic
+    - ./backend/alembic.ini:/app/alembic.ini
 
 x-frontend-base: &frontend-base
   build:
@@ -180,9 +182,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./backend/app:/app/app
-      - ./backend/alembic:/app/alembic
     command: alembic revision --autogenerate -m "${MIGRATION_MESSAGE:-auto migration}"
     profiles:
       - make-migrations
@@ -194,9 +193,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./backend/app:/app/app
-      - ./backend/alembic:/app/alembic
     command: alembic upgrade head
     profiles:
       - migrate
