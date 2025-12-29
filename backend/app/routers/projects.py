@@ -140,12 +140,12 @@ async def list_projects(
 )
 async def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
     # Validate git URL is accessible
-    _validate_git_url(str(project.git_url))
+    _validate_git_url(project.git_url)
 
     # Create the project
     new_project = ProjectModel(
         name=project.name,
-        git_url=str(project.git_url),
+        git_url=project.git_url,
         main_branch=project.main_branch,
         triage_connection_id=project.triage_connection_id,
     )
@@ -197,8 +197,7 @@ async def update_project(
 
     # If git_url is being updated, validate it
     if "git_url" in update_data:
-        _validate_git_url(str(update_data["git_url"]))
-        update_data["git_url"] = str(update_data["git_url"])
+        _validate_git_url(update_data["git_url"])
 
     if update_data:
         for key, value in update_data.items():

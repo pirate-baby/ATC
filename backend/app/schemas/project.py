@@ -1,8 +1,34 @@
 from datetime import datetime
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
+from pydantic import BaseModel, Field, field_validator
+
+
+def _validate_git_url_value(v: str) -> str:
+    """Validate git URL - accepts local paths or URLs with valid schemes."""
+    v = v.strip()
+    if not v:
+        raise ValueError("git_url cannot be empty")
+    # If it starts with / or ~, treat as local path
+    if v.startswith("/") or v.startswith("~"):
+        return v
+    # Otherwise validate as URL with allowed schemes
+    allowed_schemes = ["http", "https", "file", "git", "ssh"]
+    # Check if it looks like a URL (has scheme)
+    if "://" in v:
+        scheme = v.split("://")[0].lower()
+        if scheme not in allowed_schemes:
+            raise ValueError(f"URL scheme must be one of: {', '.join(allowed_schemes)}")
+    # SSH shorthand format like git@github.com:user/repo.git
+    elif "@" in v and ":" in v:
+        return v
+    else:
+        raise ValueError(
+            "git_url must be a local path (starting with / or ~), "
+            "a URL with scheme (http, https, file, git, ssh), "
+            "or SSH shorthand (git@host:path)"
+        )
+    return v
 
 
 class ProjectSettings(BaseModel):
@@ -37,17 +63,15 @@ class ProjectSettingsUpdate(BaseModel):
     )
 
 
-# Custom URL type that allows http, https, file, git, and ssh schemes for git repositories
-GitUrl = Annotated[
-    AnyUrl,
-    UrlConstraints(allowed_schemes=["http", "https", "file", "git", "ssh"]),
-]
-
-
 class ProjectBase(BaseModel):
     name: str = Field(description="Human-readable project name")
-    git_url: GitUrl = Field(description="Git repository URL")
+    git_url: str = Field(description="Git repository URL or local path")
     main_branch: str = Field(default="main", description="Primary branch name")
+
+    @field_validator("git_url")
+    @classmethod
+    def validate_git_url(cls, v: str) -> str:
+        return _validate_git_url_value(v)
 
 
 class ProjectCreate(ProjectBase):
@@ -61,11 +85,18 @@ class ProjectCreate(ProjectBase):
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, description="Human-readable project name")
-    git_url: GitUrl | None = Field(default=None, description="Git repository URL")
+    git_url: str | None = Field(default=None, description="Git repository URL or local path")
     main_branch: str | None = Field(default=None, description="Primary branch name")
     triage_connection_id: UUID | None = Field(
         default=None, description="Associated triage connection ID"
     )
+
+    @field_validator("git_url")
+    @classmethod
+    def validate_git_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _validate_git_url_value(v)
 
 
 class Project(ProjectBase):
