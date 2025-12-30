@@ -15,6 +15,7 @@ from app.models.plan import Plan
 from app.models.project import Project, ProjectSettings
 from app.models.review import Review
 from app.models.task import Task, task_blocking
+from app.models.task_image import TaskImage
 from app.models.triage import TriageConnection, TriageItem
 from app.models.user import User
 
@@ -37,6 +38,7 @@ __all__ = [
     "Plan",
     "Task",
     "task_blocking",
+    "TaskImage",
     "HAT",
     "TriageConnection",
     "TriageItem",

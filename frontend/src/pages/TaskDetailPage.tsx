@@ -6,6 +6,7 @@ import { StartCodingButton } from "../components/StartCodingButton";
 import { EndSessionButton } from "../components/EndSessionButton";
 import { SessionInfo } from "../components/SessionInfo";
 import { DiffViewer } from "../components/DiffViewer";
+import { ImageUploader } from "../components/ImageUploader";
 import { useSession } from "../hooks/useSession";
 import { useDiff } from "../hooks";
 import { TaskWithDetails, TaskStatus, TASK_STATUS_CONFIG } from "../types/task";
@@ -321,6 +322,15 @@ export function TaskDetailPage() {
             ) : (
               <p className="task-empty-text">No description provided</p>
             )}
+          </div>
+
+          {/* Images */}
+          <div className="task-card-section">
+            <ImageUploader
+              taskId={task.id}
+              images={task.images || []}
+              onImagesChange={fetchTask}
+            />
           </div>
 
           {/* Parent Plan */}

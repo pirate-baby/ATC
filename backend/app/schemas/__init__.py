@@ -40,6 +40,7 @@ from app.schemas.task import (
     TaskUpdate,
     TaskWithDetails,
 )
+from app.schemas.task_image import TaskImage, TaskImageSummary
 from app.schemas.triage import (
     TriageConnection,
     TriageConnectionCreate,
@@ -87,6 +88,8 @@ __all__ = [
     "StartSessionResponse",
     "CodeDiff",
     "FileDiff",
+    "TaskImage",
+    "TaskImageSummary",
     "User",
     "UserCreate",
     "HAT",

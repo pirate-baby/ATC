@@ -86,3 +86,6 @@ class Task(Base, UUIDMixin, TimestampMixin):
         "Review.target_type == 'task')",
         viewonly=True,
     )
+    images: Mapped[list["TaskImage"]] = relationship(
+        "TaskImage", back_populates="task", cascade="all, delete-orphan"
+    )

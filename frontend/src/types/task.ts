@@ -108,6 +108,25 @@ export interface SessionSummary {
   started_at: string;
 }
 
+// Image attachment summary
+export interface ImageSummary {
+  id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+}
+
+// Full image details
+export interface TaskImage {
+  id: string;
+  task_id: string;
+  filename: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
 // Task with related entities for detail view
 export interface TaskWithDetails extends Task {
   blocking_tasks: TaskSummary[]; // Tasks that this task blocks
@@ -115,6 +134,7 @@ export interface TaskWithDetails extends Task {
   plan: PlanSummary | null;
   reviews: ReviewSummary[];
   active_session: SessionSummary | null;
+  images: ImageSummary[]; // Attached images
 }
 
 // Summary for lists and references

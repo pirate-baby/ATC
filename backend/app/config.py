@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # Git worktree settings
     worktrees_base_path: Path = Path("/var/lib/atc/worktrees")
 
+    # File upload settings
+    uploads_base_path: Path = Path("/var/lib/atc/uploads")
+    max_image_size_bytes: int = 10 * 1024 * 1024  # 10 MB
+    allowed_image_types: list[str] = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+
     # Anthropic API settings
     anthropic_api_key: str | None = None
 

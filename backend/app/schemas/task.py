@@ -120,6 +120,17 @@ class Task(TaskBase):
         return data
 
 
+class ImageSummary(BaseModel):
+    """Summary of a task image for inclusion in task responses."""
+
+    id: UUID
+    original_filename: str
+    content_type: str
+    size_bytes: int
+
+    model_config = {"from_attributes": True}
+
+
 class TaskWithDetails(Task):
     plan: "PlanSummary | None" = Field(default=None, description="Parent plan summary")
     blocking_tasks: list["TaskSummary"] = Field(
@@ -131,6 +142,9 @@ class TaskWithDetails(Task):
     )
     active_session: "SessionSummary | None" = Field(
         default=None, description="Currently active coding session"
+    )
+    images: list[ImageSummary] = Field(
+        default_factory=list, description="Images attached to this task"
     )
 
 

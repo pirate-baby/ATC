@@ -2,7 +2,7 @@ from collections import deque
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -12,6 +12,7 @@ from app.models.plan import Plan as PlanModel
 from app.models.project import Project as ProjectModel
 from app.models.review import Review as ReviewModel
 from app.models.task import Task as TaskModel
+from app.models.task_image import TaskImage as TaskImageModel
 from app.schemas import (
     CodeDiff,
     PaginatedResponse,
@@ -22,12 +23,14 @@ from app.schemas import (
     StartSessionResponse,
     Task,
     TaskCreate,
+    TaskImage,
     TaskUpdate,
     TaskWithDetails,
 )
 from app.schemas.common import PlanTaskStatus as SchemaPlanTaskStatus
 from app.schemas.task import (
     BlockingTasksUpdate,
+    ImageSummary,
     PlanSummary,
     ReviewSummary,
     SessionSummary,
@@ -199,6 +202,55 @@ def _build_active_session(task: TaskModel) -> SessionSummary | None:
     )
 
 
+def _copy_task_images_to_worktree(task: TaskModel, worktree_path: str) -> None:
+    """
+    Copy task images to the worktree so Claude Code can access them.
+
+    Images are copied to .task-images/ directory in the worktree root.
+    A manifest file is created listing all images with their descriptions.
+    """
+    from pathlib import Path
+    import shutil
+    import json
+
+    if not task.images:
+        return
+
+    worktree = Path(worktree_path)
+    images_dir = worktree / ".task-images"
+    images_dir.mkdir(exist_ok=True)
+
+    manifest = {
+        "task_id": str(task.id),
+        "task_title": task.title,
+        "images": [],
+    }
+
+    for image in task.images:
+        source_path = Path(image.storage_path)
+        if source_path.exists():
+            # Copy image to worktree
+            dest_path = images_dir / image.original_filename
+            # Handle duplicate filenames by adding a suffix
+            counter = 1
+            while dest_path.exists():
+                stem = source_path.stem
+                suffix = source_path.suffix
+                dest_path = images_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
+
+            shutil.copy2(source_path, dest_path)
+
+            manifest["images"].append({
+                "filename": dest_path.name,
+                "original_filename": image.original_filename,
+                "content_type": image.content_type,
+                "path": str(dest_path.relative_to(worktree)),
+            })
+
+    # Write manifest file
+    manifest_path = images_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2))
 
 
 @router.get(
@@ -309,6 +361,7 @@ async def get_task(task_id: UUID, db: Session = Depends(get_db)):
         reviews=_build_reviews_summaries(task),
         threads=_build_threads_summaries(task),
         active_session=_build_active_session(task),
+        images=[ImageSummary.model_validate(img) for img in task.images],
     )
 
 
@@ -613,6 +666,9 @@ async def start_session(task_id: UUID, db: Session = Depends(get_db)):
     task.session_started_at = now
     task.version += 1
 
+    # Copy task images to the worktree for Claude Code to access
+    _copy_task_images_to_worktree(task, result.worktree_path)
+
     db.flush()
 
     return StartSessionResponse(
@@ -760,3 +816,160 @@ async def get_task_diff(
         total_additions=total_additions,
         total_deletions=total_deletions,
     )
+
+
+# =============================================================================
+# Task Image Endpoints
+# =============================================================================
+
+
+@router.get(
+    "/tasks/{task_id}/images",
+    response_model=list[TaskImage],
+    summary="List task images",
+    description="Get all images attached to a task.",
+    responses={
+        401: {"model": StandardError, "description": "Unauthorized"},
+        404: {"model": StandardError, "description": "Task not found"},
+    },
+)
+async def list_task_images(task_id: UUID, db: Session = Depends(get_db)):
+    task = get_or_404(db, TaskModel, task_id)
+    return [TaskImage.model_validate(img) for img in task.images]
+
+
+@router.post(
+    "/tasks/{task_id}/images",
+    response_model=TaskImage,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload image to task",
+    description="Upload an image attachment to a task for Claude Code to reference.",
+    responses={
+        400: {"model": StandardError, "description": "Invalid file type or size"},
+        401: {"model": StandardError, "description": "Unauthorized"},
+        404: {"model": StandardError, "description": "Task not found"},
+    },
+)
+async def upload_task_image(
+    task_id: UUID,
+    file: UploadFile,
+    db: Session = Depends(get_db),
+):
+    from uuid import uuid4
+
+    task = get_or_404(db, TaskModel, task_id)
+
+    # Validate content type
+    if file.content_type not in settings.allowed_image_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed types: {', '.join(settings.allowed_image_types)}",
+        )
+
+    # Read file content
+    content = await file.read()
+
+    # Validate file size
+    if len(content) > settings.max_image_size_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum size: {settings.max_image_size_bytes // (1024*1024)} MB",
+        )
+
+    # Generate unique filename
+    file_ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "bin"
+    unique_filename = f"{uuid4()}.{file_ext}"
+
+    # Create storage directory for this task
+    task_upload_dir = settings.uploads_base_path / "tasks" / str(task_id)
+    task_upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save file
+    storage_path = task_upload_dir / unique_filename
+    storage_path.write_bytes(content)
+
+    # Create database record
+    task_image = TaskImageModel(
+        task_id=task_id,
+        filename=unique_filename,
+        original_filename=file.filename or "unknown",
+        content_type=file.content_type or "application/octet-stream",
+        size_bytes=len(content),
+        storage_path=str(storage_path),
+    )
+    db.add(task_image)
+    db.flush()
+
+    return TaskImage.model_validate(task_image)
+
+
+@router.get(
+    "/tasks/{task_id}/images/{image_id}",
+    summary="Get task image",
+    description="Download a task image by ID.",
+    responses={
+        401: {"model": StandardError, "description": "Unauthorized"},
+        404: {"model": StandardError, "description": "Task or image not found"},
+    },
+)
+async def get_task_image(task_id: UUID, image_id: UUID, db: Session = Depends(get_db)):
+    from fastapi.responses import FileResponse
+
+    task = get_or_404(db, TaskModel, task_id)
+
+    # Find the image
+    image = None
+    for img in task.images:
+        if img.id == image_id:
+            image = img
+            break
+
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    # Check if file exists
+    from pathlib import Path
+
+    if not Path(image.storage_path).exists():
+        raise HTTPException(status_code=404, detail="Image file not found on disk")
+
+    return FileResponse(
+        path=image.storage_path,
+        media_type=image.content_type,
+        filename=image.original_filename,
+    )
+
+
+@router.delete(
+    "/tasks/{task_id}/images/{image_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete task image",
+    description="Delete an image attachment from a task.",
+    responses={
+        401: {"model": StandardError, "description": "Unauthorized"},
+        404: {"model": StandardError, "description": "Task or image not found"},
+    },
+)
+async def delete_task_image(task_id: UUID, image_id: UUID, db: Session = Depends(get_db)):
+    from pathlib import Path
+
+    task = get_or_404(db, TaskModel, task_id)
+
+    # Find the image
+    image = None
+    for img in task.images:
+        if img.id == image_id:
+            image = img
+            break
+
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    # Delete file from disk
+    file_path = Path(image.storage_path)
+    if file_path.exists():
+        file_path.unlink()
+
+    # Delete from database
+    db.delete(image)
+    db.flush()
