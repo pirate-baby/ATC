@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -14,7 +15,7 @@ class ClaudeToken(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "claude_tokens"
 
     # One-to-one relationship with user
-    user_id: Mapped["UUID"] = mapped_column(
+    user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,
