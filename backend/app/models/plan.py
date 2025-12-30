@@ -26,7 +26,12 @@ class Plan(Base, UUIDMixin, TimestampMixin):
     )
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     processing_status: Mapped[ProcessingStatus | None] = mapped_column(
-        Enum(ProcessingStatus, name="processing_status", native_enum=True),
+        Enum(
+            ProcessingStatus,
+            name="processing_status",
+            native_enum=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         default=None,
         nullable=True,
     )
