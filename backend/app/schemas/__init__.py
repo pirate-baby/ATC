@@ -1,4 +1,15 @@
 from app.schemas.base import PaginatedResponse, PaginationParams, StandardError, ValidationError
+from app.schemas.claude_token import (
+    ClaudeToken,
+    ClaudeTokenCreate,
+    ClaudeTokenStatus,
+    ClaudeTokenUpdate,
+    PoolHealth,
+    TokenPoolStats,
+    TokenPoolStatus,
+    TokenValidationResult,
+    UsageDistribution,
+)
 from app.schemas.comment import (
     Comment,
     CommentCreate,
@@ -119,4 +130,14 @@ __all__ = [
     "StatusMessage",
     "ToolUseMessage",
     "AbortMessage",
+    # Claude Token schemas
+    "ClaudeToken",
+    "ClaudeTokenCreate",
+    "ClaudeTokenUpdate",
+    "ClaudeTokenStatus",
+    "TokenPoolStatus",
+    "TokenPoolStats",
+    "PoolHealth",
+    "UsageDistribution",
+    "TokenValidationResult",
 ]

@@ -11,6 +11,7 @@ from app.auth import AuthMiddleware
 from app.config import settings
 from app.routers import (
     auth_router,
+    claude_tokens_router,
     comments_router,
     events_router,
     hats_router,
@@ -96,6 +97,7 @@ ROUTERS = [
     (users_router, "Users"),
     (hats_router, "HATs"),
     (triage_router, "Triage"),
+    (claude_tokens_router, "Claude Tokens"),
     (system_router, "System"),
     (events_router, "Events"),
     (jobs_router, "Jobs"),

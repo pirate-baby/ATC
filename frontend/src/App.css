@@ -1705,3 +1705,372 @@
     min-width: 0;
   }
 }
+
+/* ===========================================
+   Claude Token Settings
+   =========================================== */
+.claude-token-settings {
+  max-width: 600px;
+}
+
+.token-instructions {
+  margin-bottom: 1.5rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.token-instructions p {
+  margin: 0 0 1rem 0;
+}
+
+.token-setup-guide {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+
+.token-setup-guide summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #374151;
+}
+
+.token-setup-guide ol {
+  margin: 1rem 0 0 0;
+  padding-left: 1.25rem;
+}
+
+.token-setup-guide li {
+  margin-bottom: 0.5rem;
+}
+
+.token-setup-guide code {
+  background: #e5e7eb;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+}
+
+.token-status-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.token-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.token-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.token-name {
+  font-weight: 600;
+  color: #111827;
+}
+
+.token-preview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.status-active {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.status-invalid,
+.status-expired {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.status-rate_limited {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.token-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-value {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+}
+
+.token-error {
+  background: #fef2f2;
+  color: #7f1d1d;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+}
+
+.token-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.token-form {
+  margin-top: 1rem;
+}
+
+/* ===========================================
+   Pool Status
+   =========================================== */
+.pool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pool-status-compact {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.pool-health-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.pool-rate-limited {
+  color: #d97706;
+}
+
+.pool-status-error {
+  color: #dc2626;
+}
+
+.pool-status-full {
+  max-width: 600px;
+}
+
+.pool-health-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.pool-health-banner[data-health="healthy"] {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.pool-health-banner[data-health="limited"] {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+}
+
+.pool-health-banner[data-health="exhausted"] {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.pool-health-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pool-health-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.pool-health-label {
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.pool-health-cta {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #dc2626;
+}
+
+.pool-next-available {
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.pool-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.pool-stat {
+  text-align: center;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.pool-stat-value {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.pool-stat-label {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+.pool-fairness {
+  margin-bottom: 1.5rem;
+}
+
+.pool-fairness-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.pool-fairness-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.pool-fairness-score {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #059669;
+}
+
+.pool-fairness-bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.pool-fairness-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.pool-fairness-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.375rem;
+}
+
+.pool-distribution {
+  margin-bottom: 1.5rem;
+}
+
+.pool-distribution h4 {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin: 0 0 0.75rem 0;
+}
+
+.distribution-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.distribution-bar {
+  display: grid;
+  grid-template-columns: 80px 1fr 40px;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.distribution-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-align: right;
+}
+
+.distribution-bar-container {
+  height: 16px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.distribution-bar-fill {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 4px;
+  min-width: 4px;
+}
+
+.distribution-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.pool-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #92400e;
+}
+
+.pool-warning .warning-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}

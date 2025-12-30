@@ -54,3 +54,12 @@ class ProcessingStatus(str, Enum):
     GENERATING = "generating"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class ClaudeTokenStatus(str, Enum):
+    """Status of a Claude subscription token."""
+
+    ACTIVE = "active"
+    INVALID = "invalid"
+    RATE_LIMITED = "rate_limited"
+    EXPIRED = "expired"

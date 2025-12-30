@@ -1,7 +1,9 @@
 from app.models.base import Base
+from app.models.claude_token import ClaudeToken
 from app.models.coding_session import CodingSession
 from app.models.comment import Comment, CommentThread
 from app.models.enums import (
+    ClaudeTokenStatus,
     CommentThreadTargetType,
     PlanTaskStatus,
     ReviewDecision,
@@ -30,6 +32,7 @@ __all__ = [
     "ReviewTargetType",
     "ReviewDecision",
     "JobStatus",
+    "ClaudeTokenStatus",
     # Models
     "CodingSession",
     "User",
@@ -46,4 +49,5 @@ __all__ = [
     "Comment",
     "Review",
     "JobExecution",
+    "ClaudeToken",
 ]

@@ -1,7 +1,12 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAtMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.claude_token import ClaudeToken
 
 
 class User(Base, UUIDMixin, CreatedAtMixin):
@@ -18,3 +23,6 @@ class User(Base, UUIDMixin, CreatedAtMixin):
     )
     comments: Mapped[list["Comment"]] = relationship("Comment", back_populates="author")
     reviews: Mapped[list["Review"]] = relationship("Review", back_populates="reviewer")
+    claude_token: Mapped["ClaudeToken | None"] = relationship(
+        "ClaudeToken", back_populates="user", uselist=False
+    )
