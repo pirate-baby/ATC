@@ -3,7 +3,6 @@
 Uses the Claude Agent SDK to generate plan content based on project context.
 """
 
-import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -125,25 +124,29 @@ async def generate_plan_content(
 
     try:
         # Import here to avoid import errors if SDK not installed
-        from claude_agent_sdk import query
+        from claude_agent_sdk import (
+            AssistantMessage,
+            ClaudeAgentOptions,
+            TextBlock,
+            query,
+        )
 
         logger.info(f"Starting plan generation for plan_id={plan_id}")
 
-        # Use query() for one-off generation tasks
-        # The SDK handles the agent loop internally
-        result = await asyncio.to_thread(
-            query,
-            prompt,
-            options={
-                "model": "claude-sonnet-4-20250514",
-                "max_turns": 1,  # Single turn for plan generation
-                "allowed_tools": [],  # No tools needed for content generation
-            },
+        # Configure options for plan generation
+        options = ClaudeAgentOptions(
+            max_turns=1,  # Single turn for plan generation
         )
 
-        # Extract the generated content from the result
-        # The result contains messages; we need to extract text content
-        generated_content = _extract_content_from_result(result)
+        # Use query() async iterator to collect responses
+        content_parts: list[str] = []
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        content_parts.append(block.text)
+
+        generated_content = "\n".join(content_parts)
 
         if not generated_content:
             raise ClaudeGenerationError("No content generated from Claude")
@@ -152,8 +155,8 @@ async def generate_plan_content(
 
         return GenerationResult(
             content=generated_content,
-            total_cost_usd=getattr(result, "total_cost_usd", None),
-            duration_ms=getattr(result, "duration_ms", None),
+            total_cost_usd=None,
+            duration_ms=None,
         )
 
     except ImportError as e:
@@ -164,29 +167,6 @@ async def generate_plan_content(
     except Exception as e:
         logger.error(f"Plan generation failed for plan_id={plan_id}: {e}")
         raise ClaudeGenerationError(f"Failed to generate plan content: {e}") from e
-
-
-def _extract_content_from_result(result) -> str:
-    """Extract text content from Claude SDK result.
-
-    The result object contains messages with content blocks.
-    We extract all text blocks and combine them.
-    """
-    content_parts = []
-
-    # Handle the result based on SDK response structure
-    if hasattr(result, "result") and result.result:
-        # ResultMessage has a 'result' field with the final content
-        return result.result
-
-    if hasattr(result, "messages"):
-        for message in result.messages:
-            if hasattr(message, "content"):
-                for block in message.content:
-                    if hasattr(block, "text"):
-                        content_parts.append(block.text)
-
-    return "\n".join(content_parts)
 
 
 # Prompt template for generating tasks from approved plans
@@ -279,23 +259,29 @@ async def generate_tasks_from_plan(
 
     try:
         # Import here to avoid import errors if SDK not installed
-        from claude_agent_sdk import query
+        from claude_agent_sdk import (
+            AssistantMessage,
+            ClaudeAgentOptions,
+            TextBlock,
+            query,
+        )
 
         logger.info(f"Starting task generation for plan_id={plan_id}")
 
-        # Use query() for one-off generation tasks
-        result = await asyncio.to_thread(
-            query,
-            prompt,
-            options={
-                "model": "claude-sonnet-4-20250514",
-                "max_turns": 1,
-                "allowed_tools": [],
-            },
+        # Configure options for task generation
+        options = ClaudeAgentOptions(
+            max_turns=1,
         )
 
-        # Extract the generated content
-        generated_content = _extract_content_from_result(result)
+        # Use query() async iterator to collect responses
+        content_parts: list[str] = []
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        content_parts.append(block.text)
+
+        generated_content = "\n".join(content_parts)
 
         if not generated_content:
             raise ClaudeGenerationError("No content generated from Claude")
@@ -307,8 +293,8 @@ async def generate_tasks_from_plan(
 
         return TaskGenerationResult(
             tasks=tasks,
-            total_cost_usd=getattr(result, "total_cost_usd", None),
-            duration_ms=getattr(result, "duration_ms", None),
+            total_cost_usd=None,
+            duration_ms=None,
         )
 
     except ImportError as e:
