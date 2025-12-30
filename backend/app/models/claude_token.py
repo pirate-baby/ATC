@@ -30,7 +30,7 @@ class ClaudeToken(Base, UUIDMixin, TimestampMixin):
 
     # Token status
     status: Mapped[ClaudeTokenStatus] = mapped_column(
-        Enum(ClaudeTokenStatus, name="claude_token_status", native_enum=True),
+        Enum(ClaudeTokenStatus, name="claude_token_status", native_enum=True, create_type=False),
         nullable=False,
         default=ClaudeTokenStatus.ACTIVE,
     )
