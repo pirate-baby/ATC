@@ -92,41 +92,30 @@ export function ImageUploader({
 
   return (
     <div className="image-uploader">
-      <h3 className="image-uploader__title">Images</h3>
-      <p className="image-uploader__hint">
-        Attach images to provide visual context for Claude Code
-      </p>
-
-      {/* Upload area */}
-      <div
-        className={`image-uploader__dropzone ${isDragOver ? "image-uploader__dropzone--dragover" : ""} ${isUploading ? "image-uploader__dropzone--uploading" : ""}`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/gif,image/webp"
-          multiple
-          onChange={(e) => handleUpload(e.target.files)}
-          className="image-uploader__input"
-        />
-        {isUploading ? (
-          <span className="image-uploader__uploading-text">Uploading...</span>
-        ) : (
-          <>
-            <span className="image-uploader__icon">+</span>
-            <span className="image-uploader__text">
-              Drop images here or click to upload
-            </span>
-            <span className="image-uploader__subtext">
-              PNG, JPEG, GIF, WebP (max 10MB)
-            </span>
-          </>
-        )}
+      <div className="image-uploader__header">
+        <div>
+          <h3 className="image-uploader__title">Images</h3>
+          <p className="image-uploader__hint">
+            Attach images to provide visual context for Claude Code
+          </p>
+        </div>
+        <button
+          className="btn btn-primary image-uploader__add-btn"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+        >
+          {isUploading ? "Uploading..." : "+ Add Image"}
+        </button>
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp"
+        multiple
+        onChange={(e) => handleUpload(e.target.files)}
+        className="image-uploader__input"
+      />
 
       {/* Error message */}
       {uploadError && (
@@ -137,8 +126,13 @@ export function ImageUploader({
       )}
 
       {/* Image list */}
-      {images.length > 0 && (
-        <div className="image-uploader__list">
+      {images.length > 0 ? (
+        <div
+          className={`image-uploader__list ${isDragOver ? "image-uploader__list--dragover" : ""}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           {images.map((image) => (
             <div key={image.id} className="image-uploader__item">
               <div className="image-uploader__item-preview">
@@ -158,7 +152,10 @@ export function ImageUploader({
               </div>
               <button
                 className="image-uploader__item-delete"
-                onClick={() => handleDelete(image.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(image.id);
+                }}
                 title="Delete image"
               >
                 x
@@ -166,10 +163,28 @@ export function ImageUploader({
             </div>
           ))}
         </div>
-      )}
-
-      {images.length === 0 && (
-        <p className="image-uploader__empty">No images attached</p>
+      ) : (
+        <div
+          className={`image-uploader__dropzone ${isDragOver ? "image-uploader__dropzone--dragover" : ""} ${isUploading ? "image-uploader__dropzone--uploading" : ""}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {isUploading ? (
+            <span className="image-uploader__uploading-text">Uploading...</span>
+          ) : (
+            <>
+              <span className="image-uploader__icon">+</span>
+              <span className="image-uploader__text">
+                Drop images here or click to upload
+              </span>
+              <span className="image-uploader__subtext">
+                PNG, JPEG, GIF, WebP (max 10MB)
+              </span>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
