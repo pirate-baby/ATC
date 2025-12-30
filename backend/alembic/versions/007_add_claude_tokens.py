@@ -19,9 +19,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create the enum type for token status
+    # Create the enum type for token status (if it doesn't already exist)
     op.execute(
-        "CREATE TYPE claude_token_status AS ENUM ('active', 'invalid', 'rate_limited', 'expired')"
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'claude_token_status') THEN
+                CREATE TYPE claude_token_status AS ENUM ('active', 'invalid', 'rate_limited', 'expired');
+            END IF;
+        END$$;
+        """
     )
 
     # Create claude_tokens table
@@ -82,4 +89,4 @@ def downgrade() -> None:
     op.drop_index("ix_claude_tokens_status", table_name="claude_tokens")
     op.drop_index("ix_claude_tokens_user_id", table_name="claude_tokens")
     op.drop_table("claude_tokens")
-    op.execute("DROP TYPE claude_token_status")
+    op.execute("DROP TYPE IF EXISTS claude_token_status")
