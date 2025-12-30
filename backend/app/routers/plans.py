@@ -276,8 +276,6 @@ async def generate_plan_content(
     # Build project context
     project = plan.project
     project_context = f"Project: {project.name}"
-    if project.description:
-        project_context += f"\nDescription: {project.description}"
 
     # Get context from request
     context = request.context if request else None
@@ -395,8 +393,6 @@ async def spawn_tasks_from_plan(
     # Build project context
     project = plan.project
     project_context = f"Project: {project.name}"
-    if project.description:
-        project_context += f"\nDescription: {project.description}"
 
     # Submit to ARQ queue for background processing
     await submit_task_spawning(
