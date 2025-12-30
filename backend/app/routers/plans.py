@@ -281,12 +281,22 @@ async def generate_plan_content(
     context = request.context if request else None
 
     # Submit to ARQ queue for background processing
-    await submit_plan_generation(
-        plan_id=plan_id,
-        title=plan.title,
-        context=context,
-        project_context=project_context,
-    )
+    try:
+        await submit_plan_generation(
+            plan_id=plan_id,
+            title=plan.title,
+            context=context,
+            project_context=project_context,
+        )
+    except Exception as e:
+        logger.exception(f"Failed to submit plan generation job: {e}")
+        plan.processing_status = ProcessingStatus.FAILED
+        plan.processing_error = f"Failed to submit job: {e}"
+        db.flush()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to submit plan generation: {e}",
+        )
 
     return PlanGenerationStatus(
         plan_id=plan.id,

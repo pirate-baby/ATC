@@ -248,6 +248,14 @@ async def submit_plan_generation(
     Returns the ARQ job ID for status tracking.
     """
     pool = await get_redis_pool()
+    job_id = f"plan_gen_{plan_id}"
+
+    # First, try to abort any existing job with this ID (in case of retry)
+    existing_job = Job(job_id, pool)
+    existing_status = await existing_job.status()
+    if existing_status is not None:
+        logger.info(f"Found existing job {job_id} with status {existing_status}, aborting it")
+        await existing_job.abort()
 
     job = await pool.enqueue_job(
         "run_plan_generation",
@@ -255,8 +263,13 @@ async def submit_plan_generation(
         title,
         context,
         project_context,
-        _job_id=f"plan_gen_{plan_id}",
+        _job_id=job_id,
     )
+
+    if job is None:
+        # Job with this ID already exists and couldn't be replaced
+        logger.warning(f"Job {job_id} already exists, returning existing job ID")
+        return job_id
 
     logger.info(f"Submitted plan generation job for plan_id={plan_id}, job_id={job.job_id}")
     return job.job_id
@@ -274,6 +287,14 @@ async def submit_task_spawning(
     Returns the ARQ job ID for status tracking.
     """
     pool = await get_redis_pool()
+    job_id = f"task_spawn_{plan_id}"
+
+    # First, try to abort any existing job with this ID (in case of retry)
+    existing_job = Job(job_id, pool)
+    existing_status = await existing_job.status()
+    if existing_status is not None:
+        logger.info(f"Found existing job {job_id} with status {existing_status}, aborting it")
+        await existing_job.abort()
 
     job = await pool.enqueue_job(
         "run_task_spawning",
@@ -282,8 +303,13 @@ async def submit_task_spawning(
         content,
         str(project_id),
         project_context,
-        _job_id=f"task_spawn_{plan_id}",
+        _job_id=job_id,
     )
+
+    if job is None:
+        # Job with this ID already exists and couldn't be replaced
+        logger.warning(f"Job {job_id} already exists, returning existing job ID")
+        return job_id
 
     logger.info(f"Submitted task spawning job for plan_id={plan_id}, job_id={job.job_id}")
     return job.job_id

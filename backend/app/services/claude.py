@@ -134,8 +134,10 @@ async def generate_plan_content(
         logger.info(f"Starting plan generation for plan_id={plan_id}")
 
         # Configure options for plan generation
+        # Explicitly pass API key via env to ensure it's available in headless mode
         options = ClaudeAgentOptions(
             max_turns=1,  # Single turn for plan generation
+            env={"ANTHROPIC_API_KEY": settings.anthropic_api_key},
         )
 
         # Use query() async iterator to collect responses
@@ -269,8 +271,10 @@ async def generate_tasks_from_plan(
         logger.info(f"Starting task generation for plan_id={plan_id}")
 
         # Configure options for task generation
+        # Explicitly pass API key via env to ensure it's available in headless mode
         options = ClaudeAgentOptions(
             max_turns=1,
+            env={"ANTHROPIC_API_KEY": settings.anthropic_api_key},
         )
 
         # Use query() async iterator to collect responses
