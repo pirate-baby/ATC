@@ -86,7 +86,7 @@ async def list_users_with_tokens(
                 username=user.username,
                 email=user.email,
                 has_token=token is not None,
-                token_name=token.name if token else None,
+                token_name=token.name if token is not None else None,
             )
         )
 
