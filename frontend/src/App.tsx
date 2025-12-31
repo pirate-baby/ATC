@@ -13,6 +13,7 @@ import { PlanDetailPage } from './pages/PlanDetailPage'
 import { TasksPage } from './pages/TasksPage'
 import { TaskDetailPage } from './pages/TaskDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ClaudeCodeConsolePage } from './pages/ClaudeCodeConsolePage'
 import './App.css'
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
               <Route path="/projects/:projectId/tasks" element={<TasksPage />} />
               <Route path="/projects/:projectId/tasks/:taskId" element={<TaskDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/debug/claude-code-console" element={<ClaudeCodeConsolePage />} />
             </Route>
           </Routes>
         </div>

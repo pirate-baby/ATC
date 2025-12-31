@@ -1,6 +1,7 @@
 from app.routers.auth import router as auth_router
 from app.routers.claude_tokens import router as claude_tokens_router
 from app.routers.comments import router as comments_router
+from app.routers.debug import router as debug_router
 from app.routers.events import router as events_router
 from app.routers.hats import router as hats_router
 from app.routers.jobs import router as jobs_router
@@ -26,4 +27,5 @@ __all__ = [
     "system_router",
     "events_router",
     "jobs_router",
+    "debug_router",
 ]

@@ -13,6 +13,7 @@ from app.routers import (
     auth_router,
     claude_tokens_router,
     comments_router,
+    debug_router,
     events_router,
     hats_router,
     jobs_router,
@@ -101,6 +102,7 @@ ROUTERS = [
     (system_router, "System"),
     (events_router, "Events"),
     (jobs_router, "Jobs"),
+    (debug_router, "Debug"),
 ]
 
 for router, tag in ROUTERS:
