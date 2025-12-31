@@ -128,11 +128,18 @@ async def debug_claude_console(websocket: WebSocket):
         "timestamp": "..."
     }
     """
+    client_host = websocket.client.host if websocket.client else "unknown"
+    logger.info(f"WebSocket connection attempt from {client_host}")
+
     current_user = await validate_websocket_token(websocket)
     if current_user is None:
+        logger.warning(f"WebSocket authentication failed for {client_host}")
         return
 
+    logger.info(f"WebSocket authenticated for user {current_user.username} (id: {current_user.id})")
+
     await websocket.accept()
+    logger.info(f"WebSocket connection accepted for user {current_user.username}")
 
     db = next(iter(get_db()))
     try:
@@ -143,13 +150,20 @@ async def debug_claude_console(websocket: WebSocket):
         while True:
             try:
                 data = await websocket.receive_json()
+                logger.debug(f"Received WebSocket message from {current_user.username}: type={data.get('type')}")
 
                 if data.get("type") == "chat":
                     # Extract messages and optional token selection
                     messages = data.get("messages", [])
                     use_token_id = data.get("use_token_id")
 
+                    logger.info(
+                        f"Processing chat request from {current_user.username}: "
+                        f"{len(messages)} messages, token_id={use_token_id}"
+                    )
+
                     if not messages:
+                        logger.warning(f"Empty messages received from {current_user.username}")
                         await websocket.send_json(
                             {
                                 "type": "error",
@@ -165,10 +179,12 @@ async def debug_claude_console(websocket: WebSocket):
 
                     if use_token_id:
                         # Use specific token (verify it exists and belongs to a user)
+                        logger.debug(f"Looking up specific token: {use_token_id}")
                         token = db.scalar(
                             select(ClaudeTokenModel).where(ClaudeTokenModel.id == UUID(use_token_id))
                         )
                         if not token:
+                            logger.error(f"Token {use_token_id} not found for user {current_user.username}")
                             await websocket.send_json(
                                 {
                                     "type": "error",
@@ -181,7 +197,12 @@ async def debug_claude_console(websocket: WebSocket):
                         try:
                             token_str = decrypt_token(token.encrypted_token)
                             token_id = token.id
+                            logger.info(f"Using specific token {token.name} (id: {token_id}) for user {current_user.username}")
                         except ValueError as e:
+                            logger.error(
+                                f"Failed to decrypt token {use_token_id} for user {current_user.username}: {e!r}",
+                                exc_info=True,
+                            )
                             await websocket.send_json(
                                 {
                                     "type": "error",
@@ -192,8 +213,10 @@ async def debug_claude_console(websocket: WebSocket):
                             continue
                     else:
                         # Use pool rotation
+                        logger.debug(f"Getting token from pool for user {current_user.username}")
                         token_result = await get_available_token(db)
                         if not token_result:
+                            logger.error(f"No available tokens in pool for user {current_user.username}")
                             await websocket.send_json(
                                 {
                                     "type": "error",
@@ -204,17 +227,21 @@ async def debug_claude_console(websocket: WebSocket):
                             continue
 
                         token_str, token_id = token_result
+                        logger.info(f"Using token from pool (id: {token_id}) for user {current_user.username}")
 
                     # Stream Claude response
                     success = False
                     rate_limited = False
                     error_message = None
 
+                    logger.info(f"Starting Claude stream for user {current_user.username} with token {token_id}")
+
                     try:
                         async for message in _stream_claude_response(token_str, messages):
                             await websocket.send_json(message)
 
                         success = True
+                        logger.info(f"Claude stream completed successfully for user {current_user.username}")
                         await websocket.send_json(
                             {"type": "done", "timestamp": datetime.now(timezone.utc).isoformat()}
                         )
@@ -222,6 +249,9 @@ async def debug_claude_console(websocket: WebSocket):
                     except ClaudeRateLimitError as e:
                         rate_limited = True
                         error_message = str(e)
+                        logger.warning(
+                            f"Rate limited during Claude stream for user {current_user.username} with token {token_id}: {e}"
+                        )
                         await websocket.send_json(
                             {
                                 "type": "error",
@@ -230,7 +260,10 @@ async def debug_claude_console(websocket: WebSocket):
                             }
                         )
                     except Exception as e:
-                        logger.error(f"Error streaming Claude response: {e}", exc_info=True)
+                        logger.error(
+                            f"Error streaming Claude response for user {current_user.username}: {e!r}",
+                            exc_info=True,
+                        )
                         error_message = str(e)
                         await websocket.send_json(
                             {
@@ -242,6 +275,10 @@ async def debug_claude_console(websocket: WebSocket):
                     finally:
                         # Record token usage
                         if token_id:
+                            logger.debug(
+                                f"Recording token usage for token {token_id}: "
+                                f"success={success}, rate_limited={rate_limited}"
+                            )
                             await record_token_usage(
                                 db=db,
                                 token_id=token_id,
@@ -252,9 +289,13 @@ async def debug_claude_console(websocket: WebSocket):
                             db.commit()
 
             except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected for user {current_user.username}")
                 break
             except Exception as e:
-                logger.error(f"Error in debug console websocket: {e}", exc_info=True)
+                logger.error(
+                    f"Unhandled error in debug console websocket for user {current_user.username}: {e!r}",
+                    exc_info=True,
+                )
                 try:
                     await websocket.send_json(
                         {
@@ -263,10 +304,15 @@ async def debug_claude_console(websocket: WebSocket):
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
                     )
-                except:
+                except Exception as send_error:
+                    logger.error(
+                        f"Failed to send error message to client {current_user.username}: {send_error!r}",
+                        exc_info=True,
+                    )
                     break
 
     finally:
+        logger.info(f"Closing WebSocket connection for user {current_user.username}")
         db.close()
 
 
@@ -289,6 +335,8 @@ async def _stream_claude_response(
 
     This uses the Claude Agent SDK to stream responses with thoughts and outputs.
     """
+    logger.debug(f"Initializing Claude Agent SDK stream with {len(messages)} messages")
+
     try:
         from claude_agent_sdk import (
             AssistantMessage,
@@ -300,7 +348,7 @@ async def _stream_claude_response(
             query,
         )
     except ImportError as e:
-        logger.error(f"Claude Agent SDK not installed: {e}")
+        logger.error(f"Claude Agent SDK not installed: {e!r}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Claude Agent SDK not installed",
@@ -334,34 +382,47 @@ async def _stream_claude_response(
                 break
 
         if not last_user_message:
+            logger.error("No user message found in messages list")
             raise ValueError("No user message found")
 
+        logger.info(f"Starting Claude SDK query with message length: {len(str(last_user_message))}")
+
+        message_count = 0
         async for message in query(prompt=last_user_message, options=options):
             timestamp = datetime.now(timezone.utc).isoformat()
 
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, ThinkingBlock):
+                        message_count += 1
+                        logger.debug(f"Yielding thought block #{message_count}")
                         yield {
                             "type": "thought",
                             "content": block.thinking,
                             "timestamp": timestamp,
                         }
                     elif isinstance(block, TextBlock):
+                        message_count += 1
+                        logger.debug(f"Yielding text block #{message_count}")
                         yield {
                             "type": "output",
                             "content": block.text,
                             "timestamp": timestamp,
                         }
                     elif isinstance(block, OutputBlock):
+                        message_count += 1
+                        logger.debug(f"Yielding output block #{message_count}")
                         yield {
                             "type": "output",
                             "content": block.output,
                             "timestamp": timestamp,
                         }
 
+        logger.info(f"Claude SDK stream completed successfully with {message_count} message blocks")
+
     except Exception as e:
         error_str = str(e).lower()
+        logger.error(f"Error in Claude SDK stream: {e!r}", exc_info=True)
         if "rate" in error_str and "limit" in error_str:
             raise ClaudeRateLimitError(str(e)) from e
         raise

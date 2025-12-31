@@ -57,6 +57,8 @@ async def run_plan_generation(
 
     This job is executed by ARQ workers with automatic retry on failure.
     """
+    logger.info(f"Starting plan generation job for plan_id={plan_id}, title='{title}'")
+
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -71,6 +73,7 @@ async def run_plan_generation(
     plan_uuid = UUID(plan_id)
 
     # Create database session for this job
+    logger.debug(f"Creating database session for plan generation job {plan_id}")
     engine = create_engine(settings.database_url)
     SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     db = SessionLocal()
@@ -80,6 +83,8 @@ async def run_plan_generation(
         if not plan:
             logger.error(f"Plan {plan_id} not found during generation")
             return {"success": False, "error": "Plan not found"}
+
+        logger.info(f"Calling Claude service to generate plan content for plan_id={plan_id}")
 
         try:
             result = await claude_service.generate_plan(
@@ -94,7 +99,10 @@ async def run_plan_generation(
             plan.processing_error = None
             db.commit()
 
-            logger.info(f"Plan generation completed for plan_id={plan_id}")
+            logger.info(
+                f"Plan generation completed successfully for plan_id={plan_id}, "
+                f"content_length={len(result.content)}"
+            )
             return {
                 "success": True,
                 "plan_id": plan_id,
@@ -102,22 +110,31 @@ async def run_plan_generation(
             }
 
         except (ClaudeNotConfiguredError, ClaudeGenerationError) as e:
-            logger.error(f"Plan generation failed for plan_id={plan_id}: {e}")
+            logger.error(
+                f"Plan generation failed for plan_id={plan_id}: {e!r}",
+                exc_info=True,
+            )
             plan.processing_status = ProcessingStatus.FAILED
             plan.processing_error = str(e)
             db.commit()
             raise  # Re-raise to trigger ARQ retry
 
     except Exception as e:
-        logger.exception(f"Unexpected error during plan generation for plan_id={plan_id}")
+        logger.error(
+            f"Unexpected error during plan generation for plan_id={plan_id}: {e!r}",
+            exc_info=True,
+        )
         try:
             plan = db.query(PlanModel).filter(PlanModel.id == plan_uuid).first()
             if plan:
                 plan.processing_status = ProcessingStatus.FAILED
                 plan.processing_error = f"Unexpected error: {e}"
                 db.commit()
-        except Exception:
-            pass
+        except Exception as inner_e:
+            logger.error(
+                f"Failed to update plan status after error for plan_id={plan_id}: {inner_e!r}",
+                exc_info=True,
+            )
         raise
 
     finally:
@@ -137,6 +154,8 @@ async def run_task_spawning(
 
     This job is executed by ARQ workers with automatic retry on failure.
     """
+    logger.info(f"Starting task spawning job for plan_id={plan_id}, title='{title}'")
+
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -153,6 +172,7 @@ async def run_task_spawning(
     plan_uuid = UUID(plan_id)
     project_uuid = UUID(project_id)
 
+    logger.debug(f"Creating database session for task spawning job {plan_id}")
     engine = create_engine(settings.database_url)
     SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     db = SessionLocal()
@@ -163,6 +183,8 @@ async def run_task_spawning(
             logger.error(f"Plan {plan_id} not found during task spawning")
             return {"success": False, "error": "Plan not found"}
 
+        logger.info(f"Calling Claude service to generate tasks for plan_id={plan_id}")
+
         try:
             result = await claude_service.generate_tasks(
                 plan_id=plan_uuid,
@@ -171,8 +193,11 @@ async def run_task_spawning(
                 project_context=project_context,
             )
 
+            logger.info(f"Claude returned {len(result.tasks)} tasks for plan_id={plan_id}")
+
             created_tasks: list[TaskModel] = []
-            for generated_task in result.tasks:
+            for i, generated_task in enumerate(result.tasks):
+                logger.debug(f"Creating task {i+1}/{len(result.tasks)}: '{generated_task.title}'")
                 new_task = TaskModel(
                     project_id=project_uuid,
                     plan_id=plan_uuid,
@@ -184,6 +209,7 @@ async def run_task_spawning(
                 created_tasks.append(new_task)
 
             # Set up blocking relationships
+            logger.debug(f"Setting up blocking relationships for {len(created_tasks)} tasks")
             for i, generated_task in enumerate(result.tasks):
                 if generated_task.blocked_by_indices:
                     blocking_tasks = [
@@ -194,13 +220,17 @@ async def run_task_spawning(
                     created_tasks[i].blocked_by = blocking_tasks
                     if blocking_tasks:
                         created_tasks[i].status = ModelPlanTaskStatus.BLOCKED
+                        logger.debug(
+                            f"Task '{created_tasks[i].title}' blocked by {len(blocking_tasks)} tasks"
+                        )
 
             plan.processing_status = ProcessingStatus.COMPLETED
             plan.processing_error = None
             db.commit()
 
             logger.info(
-                f"Task spawning completed for plan_id={plan_id}, created {len(created_tasks)} tasks"
+                f"Task spawning completed successfully for plan_id={plan_id}, "
+                f"created {len(created_tasks)} tasks"
             )
             return {
                 "success": True,
@@ -209,22 +239,31 @@ async def run_task_spawning(
             }
 
         except (ClaudeNotConfiguredError, ClaudeGenerationError) as e:
-            logger.error(f"Task spawning failed for plan_id={plan_id}: {e}")
+            logger.error(
+                f"Task spawning failed for plan_id={plan_id}: {e!r}",
+                exc_info=True,
+            )
             plan.processing_status = ProcessingStatus.FAILED
             plan.processing_error = str(e)
             db.commit()
             raise
 
     except Exception as e:
-        logger.exception(f"Unexpected error during task spawning for plan_id={plan_id}")
+        logger.error(
+            f"Unexpected error during task spawning for plan_id={plan_id}: {e!r}",
+            exc_info=True,
+        )
         try:
             plan = db.query(PlanModel).filter(PlanModel.id == plan_uuid).first()
             if plan:
                 plan.processing_status = ProcessingStatus.FAILED
                 plan.processing_error = f"Unexpected error: {e}"
                 db.commit()
-        except Exception:
-            pass
+        except Exception as inner_e:
+            logger.error(
+                f"Failed to update plan status after error for plan_id={plan_id}: {inner_e!r}",
+                exc_info=True,
+            )
         raise
 
     finally:
@@ -326,8 +365,8 @@ async def get_job_status(job_id: str) -> dict[str, Any]:
     if status == ArqJobStatus.complete:
         try:
             result = await job.result()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to get result for completed job {job_id}: {e!r}", exc_info=True)
 
     return {
         "job_id": job_id,
@@ -385,12 +424,18 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 async def on_job_start(ctx: dict[str, Any]) -> None:
     """Called when a job starts."""
-    logger.debug(f"Job starting: {ctx.get('job_id')} on worker {ctx.get('worker_id')}")
+    job_name = ctx.get('job_name', 'unknown')
+    job_id = ctx.get('job_id', 'unknown')
+    worker_id = ctx.get('worker_id', 'unknown')
+    logger.info(f"Job '{job_name}' starting: {job_id} on worker {worker_id}")
 
 
 async def on_job_end(ctx: dict[str, Any]) -> None:
     """Called when a job ends (success or failure)."""
-    logger.debug(f"Job ended: {ctx.get('job_id')}")
+    job_name = ctx.get('job_name', 'unknown')
+    job_id = ctx.get('job_id', 'unknown')
+    job_try = ctx.get('job_try', 0)
+    logger.info(f"Job '{job_name}' ended: {job_id} (attempt {job_try})")
 
 
 class WorkerSettings:

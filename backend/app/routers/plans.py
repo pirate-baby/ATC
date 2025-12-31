@@ -280,6 +280,10 @@ async def generate_plan_content(
     # Get context from request
     context = request.context if request else None
 
+    logger.info(
+        f"Submitting plan generation job for plan {plan_id} ('{plan.title}') in project {project.name}"
+    )
+
     # Submit to ARQ queue for background processing
     try:
         await submit_plan_generation(
@@ -288,8 +292,12 @@ async def generate_plan_content(
             context=context,
             project_context=project_context,
         )
+        logger.info(f"Plan generation job successfully queued for plan {plan_id}")
     except Exception as e:
-        logger.exception(f"Failed to submit plan generation job: {e}")
+        logger.error(
+            f"Failed to submit plan generation job for plan {plan_id}: {e!r}",
+            exc_info=True,
+        )
         plan.processing_status = ProcessingStatus.FAILED
         plan.processing_error = f"Failed to submit job: {e}"
         db.flush()
@@ -404,14 +412,33 @@ async def spawn_tasks_from_plan(
     project = plan.project
     project_context = f"Project: {project.name}"
 
-    # Submit to ARQ queue for background processing
-    await submit_task_spawning(
-        plan_id=plan_id,
-        title=plan.title,
-        content=plan.content,
-        project_id=plan.project_id,
-        project_context=project_context,
+    logger.info(
+        f"Submitting task spawning job for plan {plan_id} ('{plan.title}') in project {project.name}"
     )
+
+    # Submit to ARQ queue for background processing
+    try:
+        await submit_task_spawning(
+            plan_id=plan_id,
+            title=plan.title,
+            content=plan.content,
+            project_id=plan.project_id,
+            project_context=project_context,
+        )
+        logger.info(f"Task spawning job successfully queued for plan {plan_id}")
+    except Exception as e:
+        logger.error(
+            f"Failed to submit task spawning job for plan {plan_id}: {e!r}",
+            exc_info=True,
+        )
+        # Reset status and record error
+        plan.processing_status = ProcessingStatus.COMPLETED
+        plan.processing_error = f"Failed to queue task spawning: {str(e)}"
+        db.flush()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to queue task spawning: {str(e)}",
+        )
 
     return SpawnTasksStatus(
         plan_id=plan.id,

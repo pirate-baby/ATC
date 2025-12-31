@@ -131,7 +131,8 @@ async def generate_plan_content(
             query,
         )
 
-        logger.info(f"Starting plan generation for plan_id={plan_id}")
+        logger.info(f"Starting plan generation for plan_id={plan_id}, title='{title}'")
+        logger.debug(f"Prompt length: {len(prompt)} characters")
 
         # Configure options for plan generation
         # Explicitly pass API key via env to ensure it's available in headless mode
@@ -142,18 +143,26 @@ async def generate_plan_content(
 
         # Use query() async iterator to collect responses
         content_parts: list[str] = []
+        message_count = 0
         async for message in query(prompt=prompt, options=options):
+            message_count += 1
+            logger.debug(f"Received message #{message_count} from Claude SDK")
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         content_parts.append(block.text)
+                        logger.debug(f"Added text block with {len(block.text)} characters")
 
         generated_content = "\n".join(content_parts)
 
         if not generated_content:
+            logger.error(f"No content generated from Claude for plan_id={plan_id}")
             raise ClaudeGenerationError("No content generated from Claude")
 
-        logger.info(f"Plan generation completed for plan_id={plan_id}")
+        logger.info(
+            f"Plan generation completed for plan_id={plan_id}, "
+            f"content_length={len(generated_content)}, messages={message_count}"
+        )
 
         return GenerationResult(
             content=generated_content,
@@ -162,12 +171,15 @@ async def generate_plan_content(
         )
 
     except ImportError as e:
-        logger.error(f"Claude Agent SDK not installed: {e}")
+        logger.error(f"Claude Agent SDK not installed: {e!r}", exc_info=True)
         raise ClaudeNotConfiguredError(
             "Claude Agent SDK not installed. Run: pip install claude-agent-sdk"
         ) from e
     except Exception as e:
-        logger.error(f"Plan generation failed for plan_id={plan_id}: {e}")
+        logger.error(
+            f"Plan generation failed for plan_id={plan_id}: {e!r}",
+            exc_info=True,
+        )
         raise ClaudeGenerationError(f"Failed to generate plan content: {e}") from e
 
 
@@ -268,7 +280,8 @@ async def generate_tasks_from_plan(
             query,
         )
 
-        logger.info(f"Starting task generation for plan_id={plan_id}")
+        logger.info(f"Starting task generation for plan_id={plan_id}, title='{title}'")
+        logger.debug(f"Prompt length: {len(prompt)} characters, content length: {len(content)} characters")
 
         # Configure options for task generation
         # Explicitly pass API key via env to ensure it's available in headless mode
@@ -279,21 +292,31 @@ async def generate_tasks_from_plan(
 
         # Use query() async iterator to collect responses
         content_parts: list[str] = []
+        message_count = 0
         async for message in query(prompt=prompt, options=options):
+            message_count += 1
+            logger.debug(f"Received message #{message_count} from Claude SDK for task generation")
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         content_parts.append(block.text)
+                        logger.debug(f"Added text block with {len(block.text)} characters")
 
         generated_content = "\n".join(content_parts)
 
         if not generated_content:
+            logger.error(f"No content generated from Claude for task generation, plan_id={plan_id}")
             raise ClaudeGenerationError("No content generated from Claude")
+
+        logger.debug(f"Parsing tasks from {len(generated_content)} characters of response")
 
         # Parse the JSON response
         tasks = _parse_tasks_from_response(generated_content)
 
-        logger.info(f"Task generation completed for plan_id={plan_id}, generated {len(tasks)} tasks")
+        logger.info(
+            f"Task generation completed for plan_id={plan_id}, "
+            f"generated {len(tasks)} tasks, messages={message_count}"
+        )
 
         return TaskGenerationResult(
             tasks=tasks,
@@ -302,14 +325,17 @@ async def generate_tasks_from_plan(
         )
 
     except ImportError as e:
-        logger.error(f"Claude Agent SDK not installed: {e}")
+        logger.error(f"Claude Agent SDK not installed: {e!r}", exc_info=True)
         raise ClaudeNotConfiguredError(
             "Claude Agent SDK not installed. Run: pip install claude-agent-sdk"
         ) from e
     except ClaudeGenerationError:
         raise
     except Exception as e:
-        logger.error(f"Task generation failed for plan_id={plan_id}: {e}")
+        logger.error(
+            f"Task generation failed for plan_id={plan_id}: {e!r}",
+            exc_info=True,
+        )
         raise ClaudeGenerationError(f"Failed to generate tasks from plan: {e}") from e
 
 
@@ -325,46 +351,61 @@ def _parse_tasks_from_response(response: str) -> list[GeneratedTask]:
     Raises:
         ClaudeGenerationError: If parsing fails
     """
+    logger.debug(f"Parsing task response with {len(response)} characters")
+
     # Try to extract JSON from the response (in case there's surrounding text)
     json_str = response.strip()
 
     # Handle markdown code blocks
     if "```json" in json_str:
+        logger.debug("Found JSON markdown code block in response")
         start = json_str.find("```json") + 7
         end = json_str.find("```", start)
         json_str = json_str[start:end].strip()
     elif "```" in json_str:
+        logger.debug("Found generic markdown code block in response")
         start = json_str.find("```") + 3
         end = json_str.find("```", start)
         json_str = json_str[start:end].strip()
 
     try:
         data = json.loads(json_str)
+        logger.debug(f"Successfully parsed JSON with keys: {list(data.keys())}")
     except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse tasks JSON: {e!r}", exc_info=True)
+        logger.debug(f"Failed JSON string (first 500 chars): {json_str[:500]}")
         raise ClaudeGenerationError(f"Failed to parse tasks JSON: {e}") from e
 
     if not isinstance(data, dict) or "tasks" not in data:
+        logger.error(f"Invalid response format: missing 'tasks' key. Keys found: {list(data.keys())}")
         raise ClaudeGenerationError("Invalid response format: missing 'tasks' key")
 
     tasks_data = data["tasks"]
     if not isinstance(tasks_data, list):
+        logger.error(f"Invalid response format: 'tasks' is {type(tasks_data)} instead of list")
         raise ClaudeGenerationError("Invalid response format: 'tasks' must be a list")
+
+    logger.debug(f"Parsing {len(tasks_data)} tasks from response")
 
     tasks: list[GeneratedTask] = []
     for i, task_data in enumerate(tasks_data):
         if not isinstance(task_data, dict):
+            logger.error(f"Invalid task at index {i}: {type(task_data)} instead of dict")
             raise ClaudeGenerationError(f"Invalid task at index {i}: must be an object")
 
         title = task_data.get("title")
         description = task_data.get("description")
 
         if not title or not isinstance(title, str):
+            logger.error(f"Invalid task at index {i}: missing or invalid title")
             raise ClaudeGenerationError(f"Invalid task at index {i}: missing or invalid 'title'")
         if not description or not isinstance(description, str):
+            logger.error(f"Invalid task at index {i}: missing or invalid description")
             raise ClaudeGenerationError(f"Invalid task at index {i}: missing or invalid 'description'")
 
         blocked_by = task_data.get("blocked_by_indices", [])
         if not isinstance(blocked_by, list):
+            logger.warning(f"Task {i} has invalid blocked_by_indices (not a list), using empty list")
             blocked_by = []
 
         # Validate blocked_by indices
@@ -373,7 +414,9 @@ def _parse_tasks_from_response(response: str) -> list[GeneratedTask]:
             if isinstance(idx, int) and 0 <= idx < i:
                 valid_blocked_by.append(idx)
             else:
-                logger.warning(f"Task {i} has invalid blocked_by index {idx}, skipping")
+                logger.warning(f"Task {i} ('{title}') has invalid blocked_by index {idx}, skipping")
+
+        logger.debug(f"Parsed task {i}: '{title}' with {len(valid_blocked_by)} dependencies")
 
         tasks.append(GeneratedTask(
             title=title,
@@ -381,6 +424,7 @@ def _parse_tasks_from_response(response: str) -> list[GeneratedTask]:
             blocked_by_indices=valid_blocked_by,
         ))
 
+    logger.debug(f"Successfully parsed {len(tasks)} tasks")
     return tasks
 
 

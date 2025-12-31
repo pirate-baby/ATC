@@ -1,11 +1,14 @@
 import logging
+import sys
+import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.auth import AuthMiddleware
 from app.config import settings
@@ -27,7 +30,31 @@ from app.routers import (
 )
 from app.services.task_queue import close_redis_pool, get_redis_pool
 
-logger = logging.getLogger(__name__)
+
+def configure_logging():
+    """Configure application-wide logging with proper formatting."""
+    log_level = logging.DEBUG if settings.environment == "development" else logging.INFO
+
+    # Configure root logger
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+        force=True,  # Override any existing configuration
+    )
+
+    # Set specific log levels for noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+    logger = logging.getLogger(__name__)
+    logger.info(f"Logging configured at {logging.getLevelName(log_level)} level")
+    return logger
+
+
+logger = configure_logging()
 
 
 def run_migrations() -> None:
@@ -77,6 +104,51 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler to catch and log all unhandled exceptions."""
+    # Log the full exception with traceback
+    logger.error(
+        f"Unhandled exception in {request.method} {request.url.path}: {exc!r}",
+        exc_info=True,
+        extra={
+            "method": request.method,
+            "url": str(request.url),
+            "client": request.client.host if request.client else None,
+            "exception_type": type(exc).__name__,
+        },
+    )
+
+    # Return JSON error response
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "Internal server error",
+            "error": str(exc) if settings.environment == "development" else "An unexpected error occurred",
+            "type": type(exc).__name__,
+        },
+    )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all HTTP requests and responses."""
+    logger.info(f"→ {request.method} {request.url.path}")
+
+    try:
+        response = await call_next(request)
+        log_level = logging.ERROR if response.status_code >= 400 else logging.INFO
+        logger.log(log_level, f"← {request.method} {request.url.path} → {response.status_code}")
+        return response
+    except Exception as e:
+        logger.error(
+            f"← {request.method} {request.url.path} → EXCEPTION: {e!r}",
+            exc_info=True,
+        )
+        raise
+
 
 app.add_middleware(AuthMiddleware)
 
