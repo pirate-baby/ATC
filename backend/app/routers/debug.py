@@ -35,7 +35,7 @@ class UserWithToken(BaseModel):
     """User with their Claude token info."""
 
     user_id: UUID
-    username: str
+    username: str  # Using git_handle as username
     email: str | None = None
     has_token: bool
     token_name: str | None = None
@@ -83,7 +83,7 @@ async def list_users_with_tokens(
         result.append(
             UserWithToken(
                 user_id=user.id,
-                username=user.username,
+                username=user.git_handle,  # Use git_handle as username
                 email=user.email,
                 has_token=token is not None,
                 token_name=token.name if token is not None else None,
@@ -136,10 +136,10 @@ async def debug_claude_console(websocket: WebSocket):
         logger.warning(f"WebSocket authentication failed for {client_host}")
         return
 
-    logger.info(f"WebSocket authenticated for user {current_user.username} (id: {current_user.id})")
+    logger.info(f"WebSocket authenticated for user {current_user.git_handle} (id: {current_user.id})")
 
     await websocket.accept()
-    logger.info(f"WebSocket connection accepted for user {current_user.username}")
+    logger.info(f"WebSocket connection accepted for user {current_user.git_handle}")
 
     db = next(iter(get_db()))
     try:
@@ -150,7 +150,7 @@ async def debug_claude_console(websocket: WebSocket):
         while True:
             try:
                 data = await websocket.receive_json()
-                logger.debug(f"Received WebSocket message from {current_user.username}: type={data.get('type')}")
+                logger.debug(f"Received WebSocket message from {current_user.git_handle}: type={data.get('type')}")
 
                 if data.get("type") == "chat":
                     # Extract messages and optional token selection
@@ -158,12 +158,12 @@ async def debug_claude_console(websocket: WebSocket):
                     use_token_id = data.get("use_token_id")
 
                     logger.info(
-                        f"Processing chat request from {current_user.username}: "
+                        f"Processing chat request from {current_user.git_handle}: "
                         f"{len(messages)} messages, token_id={use_token_id}"
                     )
 
                     if not messages:
-                        logger.warning(f"Empty messages received from {current_user.username}")
+                        logger.warning(f"Empty messages received from {current_user.git_handle}")
                         await websocket.send_json(
                             {
                                 "type": "error",
@@ -184,7 +184,7 @@ async def debug_claude_console(websocket: WebSocket):
                             select(ClaudeTokenModel).where(ClaudeTokenModel.id == UUID(use_token_id))
                         )
                         if not token:
-                            logger.error(f"Token {use_token_id} not found for user {current_user.username}")
+                            logger.error(f"Token {use_token_id} not found for user {current_user.git_handle}")
                             await websocket.send_json(
                                 {
                                     "type": "error",
@@ -197,10 +197,10 @@ async def debug_claude_console(websocket: WebSocket):
                         try:
                             token_str = decrypt_token(token.encrypted_token)
                             token_id = token.id
-                            logger.info(f"Using specific token {token.name} (id: {token_id}) for user {current_user.username}")
+                            logger.info(f"Using specific token {token.name} (id: {token_id}) for user {current_user.git_handle}")
                         except ValueError as e:
                             logger.error(
-                                f"Failed to decrypt token {use_token_id} for user {current_user.username}: {e!r}",
+                                f"Failed to decrypt token {use_token_id} for user {current_user.git_handle}: {e!r}",
                                 exc_info=True,
                             )
                             await websocket.send_json(
@@ -213,10 +213,10 @@ async def debug_claude_console(websocket: WebSocket):
                             continue
                     else:
                         # Use pool rotation
-                        logger.debug(f"Getting token from pool for user {current_user.username}")
+                        logger.debug(f"Getting token from pool for user {current_user.git_handle}")
                         token_result = await get_available_token(db)
                         if not token_result:
-                            logger.error(f"No available tokens in pool for user {current_user.username}")
+                            logger.error(f"No available tokens in pool for user {current_user.git_handle}")
                             await websocket.send_json(
                                 {
                                     "type": "error",
@@ -227,21 +227,21 @@ async def debug_claude_console(websocket: WebSocket):
                             continue
 
                         token_str, token_id = token_result
-                        logger.info(f"Using token from pool (id: {token_id}) for user {current_user.username}")
+                        logger.info(f"Using token from pool (id: {token_id}) for user {current_user.git_handle}")
 
                     # Stream Claude response
                     success = False
                     rate_limited = False
                     error_message = None
 
-                    logger.info(f"Starting Claude stream for user {current_user.username} with token {token_id}")
+                    logger.info(f"Starting Claude stream for user {current_user.git_handle} with token {token_id}")
 
                     try:
                         async for message in _stream_claude_response(token_str, messages):
                             await websocket.send_json(message)
 
                         success = True
-                        logger.info(f"Claude stream completed successfully for user {current_user.username}")
+                        logger.info(f"Claude stream completed successfully for user {current_user.git_handle}")
                         await websocket.send_json(
                             {"type": "done", "timestamp": datetime.now(timezone.utc).isoformat()}
                         )
@@ -250,7 +250,7 @@ async def debug_claude_console(websocket: WebSocket):
                         rate_limited = True
                         error_message = str(e)
                         logger.warning(
-                            f"Rate limited during Claude stream for user {current_user.username} with token {token_id}: {e}"
+                            f"Rate limited during Claude stream for user {current_user.git_handle} with token {token_id}: {e}"
                         )
                         await websocket.send_json(
                             {
@@ -261,7 +261,7 @@ async def debug_claude_console(websocket: WebSocket):
                         )
                     except Exception as e:
                         logger.error(
-                            f"Error streaming Claude response for user {current_user.username}: {e!r}",
+                            f"Error streaming Claude response for user {current_user.git_handle}: {e!r}",
                             exc_info=True,
                         )
                         error_message = str(e)
@@ -289,11 +289,11 @@ async def debug_claude_console(websocket: WebSocket):
                             db.commit()
 
             except WebSocketDisconnect:
-                logger.info(f"WebSocket disconnected for user {current_user.username}")
+                logger.info(f"WebSocket disconnected for user {current_user.git_handle}")
                 break
             except Exception as e:
                 logger.error(
-                    f"Unhandled error in debug console websocket for user {current_user.username}: {e!r}",
+                    f"Unhandled error in debug console websocket for user {current_user.git_handle}: {e!r}",
                     exc_info=True,
                 )
                 try:
@@ -306,13 +306,13 @@ async def debug_claude_console(websocket: WebSocket):
                     )
                 except Exception as send_error:
                     logger.error(
-                        f"Failed to send error message to client {current_user.username}: {send_error!r}",
+                        f"Failed to send error message to client {current_user.git_handle}: {send_error!r}",
                         exc_info=True,
                     )
                     break
 
     finally:
-        logger.info(f"Closing WebSocket connection for user {current_user.username}")
+        logger.info(f"Closing WebSocket connection for user {current_user.git_handle}")
         db.close()
 
 
