@@ -18,6 +18,9 @@ RUN rm -rf /var/lib/apt/lists/* \
 # Install uv for fast dependency management
 RUN pip install --no-cache-dir uv
 
+# Install Claude CLI (required by claude-agent-sdk)
+RUN pip install --no-cache-dir anthropic-tools
+
 # Copy dependency files first for better caching
 COPY pyproject.toml .
 
