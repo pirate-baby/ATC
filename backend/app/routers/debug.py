@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth import RequireAuth, validate_websocket_token
+from app.auth import CurrentUser, RequireAuth
 from app.database import get_db
 from app.models.claude_token import ClaudeToken as ClaudeTokenModel
 from app.models.user import User as UserModel
@@ -131,15 +131,28 @@ async def debug_claude_console(websocket: WebSocket):
     client_host = websocket.client.host if websocket.client else "unknown"
     logger.info(f"WebSocket connection attempt from {client_host}")
 
-    current_user = await validate_websocket_token(websocket)
-    if current_user is None:
-        logger.warning(f"WebSocket authentication failed for {client_host}")
+    # Accept connection first
+    await websocket.accept()
+    logger.info(f"WebSocket connection accepted from {client_host}")
+
+    # Then validate the token
+    token = websocket.query_params.get("token")
+    if not token:
+        logger.warning(f"WebSocket missing token from {client_host}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
         return
 
-    logger.info(f"WebSocket authenticated for user {current_user.git_handle} (id: {current_user.id})")
-
-    await websocket.accept()
-    logger.info(f"WebSocket connection accepted for user {current_user.git_handle}")
+    try:
+        from app.auth import decode_jwt_token
+        from uuid import UUID
+        token_payload = decode_jwt_token(token)
+        user_id = UUID(token_payload.sub)
+        current_user = CurrentUser(id=user_id, token_payload=token_payload)
+        logger.info(f"WebSocket authenticated for user {current_user.id}")
+    except Exception as e:
+        logger.warning(f"WebSocket authentication failed for {client_host}: {e}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication failed")
+        return
 
     db = next(iter(get_db()))
     try:
