@@ -434,7 +434,7 @@ async def _stream_claude_response(
         logger.info(f"Resuming session: {session_id}")
         options.resume = session_id
 
-    # Stream responses
+    # Stream responses with delta tracking to avoid content duplication
     try:
         logger.info(
             f"Starting Claude SDK query with message length: {len(str(last_user_message))}, "
@@ -442,6 +442,10 @@ async def _stream_claude_response(
         )
 
         message_count = 0
+        # Track previous lengths for each block to send only deltas
+        thinking_blocks_prev_len: dict[int, int] = {}
+        text_blocks_prev_len: dict[int, int] = {}
+
         async for message in query(prompt=last_user_message, options=options):
             timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -460,25 +464,46 @@ async def _stream_claude_response(
                         }
 
             if isinstance(message, AssistantMessage):
-                for block in message.content:
+                for idx, block in enumerate(message.content):
                     if isinstance(block, ThinkingBlock):
-                        message_count += 1
-                        logger.debug(f"Yielding thought block #{message_count}")
-                        yield {
-                            "type": "thought",
-                            "content": block.thinking,
-                            "timestamp": timestamp,
-                        }
-                    elif isinstance(block, TextBlock):
-                        message_count += 1
-                        logger.debug(f"Yielding text block #{message_count}")
-                        yield {
-                            "type": "output",
-                            "content": block.text,
-                            "timestamp": timestamp,
-                        }
+                        # Get the full content and calculate delta
+                        full_content = block.thinking
+                        prev_len = thinking_blocks_prev_len.get(idx, 0)
+                        delta = full_content[prev_len:]
 
-        logger.info(f"Claude SDK stream completed successfully with {message_count} message blocks")
+                        if delta:  # Only send if there's new content
+                            message_count += 1
+                            logger.debug(
+                                f"Yielding thought delta #{message_count}: "
+                                f"{len(delta)} new chars (total: {len(full_content)})"
+                            )
+                            yield {
+                                "type": "thought",
+                                "content": delta,
+                                "timestamp": timestamp,
+                            }
+                            thinking_blocks_prev_len[idx] = len(full_content)
+
+                    elif isinstance(block, TextBlock):
+                        # Get the full content and calculate delta
+                        full_content = block.text
+                        prev_len = text_blocks_prev_len.get(idx, 0)
+                        delta = full_content[prev_len:]
+
+                        if delta:  # Only send if there's new content
+                            message_count += 1
+                            logger.debug(
+                                f"Yielding text delta #{message_count}: "
+                                f"{len(delta)} new chars (total: {len(full_content)})"
+                            )
+                            yield {
+                                "type": "output",
+                                "content": delta,
+                                "timestamp": timestamp,
+                            }
+                            text_blocks_prev_len[idx] = len(full_content)
+
+        logger.info(f"Claude SDK stream completed successfully with {message_count} message deltas")
 
     except Exception as e:
         error_str = str(e).lower()
