@@ -170,6 +170,33 @@
   font-weight: normal;
 }
 
+.collapse-toggle {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #586069);
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  border-radius: 3px;
+}
+
+.collapse-toggle:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary, #24292e);
+}
+
+.message-collapsed {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #586069);
+  padding: 0.5rem 0;
+}
+
 .working-indicator {
   display: inline-flex;
   align-items: center;

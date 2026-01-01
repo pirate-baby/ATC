@@ -18,6 +18,7 @@ interface ChatMessage {
   timestamp: string
   messageType?: 'thinking' | 'output' | 'user_question' // Type of assistant message
   isThinking?: boolean // For current streaming thinking message
+  isCollapsed?: boolean // For thinking messages - whether they are collapsed
 }
 
 interface StreamMessage {
@@ -185,13 +186,14 @@ export function ClaudeCodeConsolePage() {
         lastMessage.content = currentThinkingRef.current
         lastMessage.timestamp = new Date().toISOString()
       } else {
-        // Create new thinking message
+        // Create new thinking message (collapsed by default)
         newMessages.push({
           role: 'assistant',
           content: currentThinkingRef.current,
           timestamp: new Date().toISOString(),
           messageType: 'thinking',
           isThinking: true,
+          isCollapsed: true,
         })
       }
 
@@ -288,6 +290,19 @@ export function ClaudeCodeConsolePage() {
     currentOutputRef.current = ''
   }
 
+  const toggleThinkingCollapse = (index: number) => {
+    setMessages(prev => {
+      const newMessages = [...prev]
+      if (newMessages[index] && newMessages[index].messageType === 'thinking') {
+        newMessages[index] = {
+          ...newMessages[index],
+          isCollapsed: !newMessages[index].isCollapsed,
+        }
+      }
+      return newMessages
+    })
+  }
+
   return (
     <div className="page-content">
       <div className="page-header">
@@ -353,7 +368,18 @@ export function ClaudeCodeConsolePage() {
               <div className="message-header">
                 <div className="message-header-left">
                   <strong>{msg.role === 'user' ? 'You' : 'Claude Code'}</strong>
-                  {msg.messageType === 'thinking' && <span className="thinking-label">(thinking)</span>}
+                  {msg.messageType === 'thinking' && (
+                    <>
+                      <span className="thinking-label">(thinking)</span>
+                      <button
+                        className="collapse-toggle"
+                        onClick={() => toggleThinkingCollapse(idx)}
+                        aria-label={msg.isCollapsed ? 'Expand thinking' : 'Collapse thinking'}
+                      >
+                        {msg.isCollapsed ? '▶' : '▼'}
+                      </button>
+                    </>
+                  )}
                   {isStreaming && idx === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="working-indicator">
                       <span className="spinner-small"></span>
@@ -365,9 +391,15 @@ export function ClaudeCodeConsolePage() {
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
               </div>
-              <div className={`message-content ${msg.messageType === 'thinking' ? 'thinking-content' : ''}`}>
-                <pre>{msg.content}</pre>
-              </div>
+              {msg.messageType === 'thinking' && msg.isCollapsed ? (
+                <div className="message-collapsed">
+                  <em>Thinking collapsed (click ▶ to expand)</em>
+                </div>
+              ) : (
+                <div className={`message-content ${msg.messageType === 'thinking' ? 'thinking-content' : ''}`}>
+                  <pre>{msg.content}</pre>
+                </div>
+              )}
             </div>
           ))}
 
