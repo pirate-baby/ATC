@@ -64,6 +64,7 @@ services:
     environment:
       <<: *db-environment
       ENVIRONMENT: development
+      HOME: /app
     depends_on:
       db:
         condition: service_healthy
@@ -84,6 +85,7 @@ services:
     environment:
       <<: *db-environment
       ENVIRONMENT: development
+      HOME: /app
     depends_on:
       db:
         condition: service_healthy
