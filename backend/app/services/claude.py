@@ -1,6 +1,10 @@
 """Claude Agent SDK integration for AI-powered plan generation.
 
 Uses the Claude Agent SDK to generate plan content based on project context.
+
+IMPORTANT: This module uses the Claude Agent SDK with the local Claude Code CLI only.
+It does NOT make direct HTTP calls to the Anthropic API. All communication goes through
+the Claude Code CLI which handles API interactions internally using user subscription tokens.
 """
 
 import json
@@ -105,7 +109,7 @@ async def generate_plan_content(
     """
     if not settings.anthropic_api_key:
         raise ClaudeNotConfiguredError(
-            "Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable."
+            "Claude Code subscription token not configured. Users should add tokens via /claude-tokens API."
         )
 
     # Build context section
@@ -135,7 +139,8 @@ async def generate_plan_content(
         logger.debug(f"Prompt length: {len(prompt)} characters")
 
         # Configure options for plan generation
-        # Explicitly pass API key via env to ensure it's available in headless mode
+        # Pass subscription token to Claude Code CLI via environment variable
+        # The CLI handles all API communication internally
         options = ClaudeAgentOptions(
             max_turns=1,  # Single turn for plan generation
             env={"ANTHROPIC_API_KEY": settings.anthropic_api_key},
@@ -257,7 +262,7 @@ async def generate_tasks_from_plan(
     """
     if not settings.anthropic_api_key:
         raise ClaudeNotConfiguredError(
-            "Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable."
+            "Claude Code subscription token not configured. Users should add tokens via /claude-tokens API."
         )
 
     # Build context section
@@ -284,7 +289,8 @@ async def generate_tasks_from_plan(
         logger.debug(f"Prompt length: {len(prompt)} characters, content length: {len(content)} characters")
 
         # Configure options for task generation
-        # Explicitly pass API key via env to ensure it's available in headless mode
+        # Pass subscription token to Claude Code CLI via environment variable
+        # The CLI handles all API communication internally
         options = ClaudeAgentOptions(
             max_turns=1,
             env={"ANTHROPIC_API_KEY": settings.anthropic_api_key},
@@ -442,7 +448,7 @@ class ClaudeService:
         """Validate that required configuration is present."""
         if not settings.anthropic_api_key:
             logger.warning(
-                "Anthropic API key not configured. Claude features will be unavailable."
+                "Claude Code subscription token not configured. Claude features will be unavailable."
             )
 
     @property

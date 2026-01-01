@@ -250,7 +250,7 @@ async def generate_plan_content(
     if not claude_service.is_configured:
         raise HTTPException(
             status_code=503,
-            detail="Claude service not configured. Set ANTHROPIC_API_KEY environment variable.",
+            detail="Claude service not configured. Users should add subscription tokens via /claude-tokens API.",
         )
 
     # Check if generation is already in progress
@@ -371,7 +371,7 @@ async def spawn_tasks_from_plan(
     if not claude_service.is_configured:
         raise HTTPException(
             status_code=503,
-            detail="Claude service not configured. Set ANTHROPIC_API_KEY environment variable.",
+            detail="Claude service not configured. Users should add subscription tokens via /claude-tokens API.",
         )
 
     # Check if plan is approved

@@ -240,54 +240,69 @@ async def validate_my_token(
 
 
 async def _validate_claude_token(token: str) -> TokenValidationResult:
-    """Validate a token by making a test request to Claude's API.
+    """Validate a Claude Code subscription token using the Claude Agent SDK.
 
-    This uses a minimal request to verify the token works without
-    consuming significant quota.
+    This validates the token by attempting a minimal query through the Claude Code CLI,
+    ensuring the token works with the subscription-based system.
+
+    IMPORTANT: This uses the Claude Agent SDK with the local Claude Code CLI.
+    It does NOT make direct HTTP calls to the Anthropic API.
     """
-    import httpx
+    try:
+        # Import Claude Agent SDK components
+        from claude_agent_sdk import (
+            AssistantMessage,
+            ClaudeAgentOptions,
+            TextBlock,
+            query,
+        )
+    except ImportError as e:
+        return TokenValidationResult(
+            valid=False,
+            error="Claude Agent SDK not installed. Run: pip install claude-agent-sdk"
+        )
 
     try:
-        async with httpx.AsyncClient() as client:
-            # Use a minimal request to test auth
-            # We'll try to create a message with max_tokens=1
-            response = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": token,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": "claude-3-haiku-20240307",
-                    "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "Hi"}],
-                },
-                timeout=30.0,
-            )
+        # Configure options with the token to test
+        # The Claude Code CLI will use this token for the subscription
+        options = ClaudeAgentOptions(
+            max_turns=1,
+            env={"ANTHROPIC_API_KEY": token},
+        )
 
-            if response.status_code == 200:
-                return TokenValidationResult(valid=True, account_type="claude")
-            elif response.status_code == 401:
-                return TokenValidationResult(valid=False, error="Invalid API key")
-            elif response.status_code == 403:
-                return TokenValidationResult(valid=False, error="Token lacks required permissions")
-            elif response.status_code == 429:
-                # Rate limited - token is valid but rate limited
-                return TokenValidationResult(
-                    valid=True,
-                    error="Token is rate limited - will work after cooldown",
-                    account_type="claude",
-                )
-            else:
-                error_body = response.json() if response.content else {}
-                error_msg = error_body.get("error", {}).get("message", f"HTTP {response.status_code}")
-                return TokenValidationResult(valid=False, error=error_msg)
+        # Attempt a minimal query through Claude Code CLI
+        # This tests the full subscription token flow
+        message_received = False
+        async for message in query(prompt="test", options=options):
+            if isinstance(message, AssistantMessage):
+                message_received = True
+                break
 
-    except httpx.TimeoutException:
-        return TokenValidationResult(valid=False, error="Request timed out")
+        if message_received:
+            return TokenValidationResult(valid=True, account_type="claude-code")
+        else:
+            return TokenValidationResult(valid=False, error="No response from Claude Code CLI")
+
     except Exception as e:
-        return TokenValidationResult(valid=False, error=f"Validation failed: {str(e)}")
+        error_str = str(e).lower()
+
+        # Parse error to determine cause
+        if "authentication" in error_str or "invalid" in error_str or "unauthorized" in error_str:
+            return TokenValidationResult(valid=False, error="Invalid subscription token")
+        elif "rate" in error_str and "limit" in error_str:
+            # Rate limited - token is valid but currently limited
+            return TokenValidationResult(
+                valid=True,
+                error="Token is rate limited - will work after cooldown",
+                account_type="claude-code",
+            )
+        elif "permission" in error_str:
+            return TokenValidationResult(valid=False, error="Token lacks required permissions")
+        elif "expired" in error_str:
+            return TokenValidationResult(valid=False, error="Token has expired")
+        else:
+            # Generic error
+            return TokenValidationResult(valid=False, error=f"Validation failed: {str(e)}")
 
 
 @router.get(

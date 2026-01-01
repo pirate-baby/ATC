@@ -1,4 +1,9 @@
-"""Debug tools for Claude Code integration."""
+"""Debug tools for Claude Code integration.
+
+IMPORTANT: This module uses the Claude Agent SDK with the local Claude Code CLI only.
+It does NOT make direct HTTP calls to the Anthropic API. All communication goes through
+the Claude Code CLI which handles API interactions internally using user subscription tokens.
+"""
 
 import asyncio
 import logging
@@ -357,6 +362,9 @@ async def _stream_claude_response(
     Stream Claude Code Agent SDK responses.
 
     This uses the Claude Agent SDK to stream responses with thoughts and outputs.
+
+    IMPORTANT: The api_key parameter is a Claude Code subscription token that gets
+    passed to the Claude Code CLI. It is NOT used for direct API calls.
     """
     logger.debug(f"Initializing Claude Agent SDK stream with {len(messages)} messages")
 
@@ -389,7 +397,9 @@ async def _stream_claude_response(
                 sdk_messages.append(UserMessage(content=content))
 
     # Configure options
-    logger.info(f"Configuring Claude SDK with API key: {api_key[:20]}...")
+    # Pass subscription token to Claude Code CLI via environment variable
+    # The CLI handles all API communication internally
+    logger.info(f"Configuring Claude SDK with subscription token: {api_key[:20]}...")
     options = ClaudeAgentOptions(
         max_turns=10,
         env={"ANTHROPIC_API_KEY": api_key},

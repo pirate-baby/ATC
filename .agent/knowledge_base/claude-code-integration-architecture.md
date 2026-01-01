@@ -1,5 +1,32 @@
 # Claude Agent SDK Integration Architecture
 
+## ⚠️ CRITICAL: Claude Code CLI Only - NO Direct API Calls
+
+**This codebase uses the Claude Agent SDK with local Claude Code CLI exclusively.**
+
+### Correct Architecture Flow
+
+```
+User Subscription Token → Claude Agent SDK → Claude Code CLI → Anthropic API (internal)
+                                                                        ↑
+                                                        We NEVER touch this directly
+```
+
+### Absolutely Prohibited
+
+❌ **DO NOT** make direct HTTP calls to `api.anthropic.com`
+❌ **DO NOT** use `httpx` or `requests` to call `/v1/messages` endpoints
+❌ **DO NOT** bypass the Claude Code CLI in any way
+❌ **DO NOT** use API headers like `x-api-key` or `anthropic-version`
+
+### Token Source
+
+All tokens are **Claude Code subscription tokens** supplied by users to the token pool rotation system. These are NOT direct Anthropic API keys.
+
+The Claude Code CLI handles all communication with the Anthropic API internally. Our code only interacts with the local CLI via the Claude Agent SDK.
+
+---
+
 ## Executive Summary
 
 This document outlines architectural patterns for integrating Claude Code as an execution runtime for planning and coding tasks using the official Claude Agent SDK (Python).
@@ -131,7 +158,7 @@ The `canUseTool` callback enables custom authorization logic. It receives tool n
 The SDK should run inside sandboxed containers providing:
 - Process isolation
 - Resource limits (recommended: 1GiB RAM, 5GiB disk, 1 CPU)
-- Network control (outbound HTTPS to api.anthropic.com)
+- Network control (Claude Code CLI handles all external communication internally)
 - Ephemeral filesystems
 
 ### Sandbox Providers
