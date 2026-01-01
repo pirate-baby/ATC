@@ -7,6 +7,7 @@ interface UserWithToken {
   username: string
   email: string | null
   has_token: boolean
+  token_id: string | null
   token_name: string | null
 }
 
@@ -28,7 +29,7 @@ interface StreamMessage {
 
 export function ClaudeCodeConsolePage() {
   const [users, setUsers] = useState<UserWithToken[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputText, setInputText] = useState('')
   const [isConnected, setIsConnected] = useState(false)
@@ -70,8 +71,8 @@ export function ClaudeCodeConsolePage() {
 
       // Auto-select first user with a token
       const firstWithToken = data.find(u => u.has_token)
-      if (firstWithToken) {
-        setSelectedUserId(firstWithToken.user_id)
+      if (firstWithToken && firstWithToken.token_id) {
+        setSelectedTokenId(firstWithToken.token_id)
       }
     } catch (err) {
       console.error('Failed to load users:', err)
@@ -201,7 +202,7 @@ export function ClaudeCodeConsolePage() {
           role: m.role,
           content: m.content,
         })),
-        use_token_id: selectedUserId,
+        use_token_id: selectedTokenId,
       }
 
       wsRef.current.send(JSON.stringify(payload))
@@ -244,13 +245,13 @@ export function ClaudeCodeConsolePage() {
             <label htmlFor="user-select">User Token:</label>
             <select
               id="user-select"
-              value={selectedUserId || ''}
-              onChange={(e) => setSelectedUserId(e.target.value || null)}
+              value={selectedTokenId || ''}
+              onChange={(e) => setSelectedTokenId(e.target.value || null)}
               disabled={isStreaming}
             >
               <option value="">Use pool rotation</option>
               {users.filter(u => u.has_token).map(user => (
-                <option key={user.user_id} value={user.user_id}>
+                <option key={user.user_id} value={user.token_id || ''}>
                   {user.username} ({user.token_name})
                 </option>
               ))}

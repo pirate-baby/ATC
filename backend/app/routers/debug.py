@@ -38,6 +38,7 @@ class UserWithToken(BaseModel):
     username: str  # Using git_handle as username
     email: str | None = None
     has_token: bool
+    token_id: UUID | None = None
     token_name: str | None = None
 
 
@@ -86,6 +87,7 @@ async def list_users_with_tokens(
                 username=user.git_handle,  # Use git_handle as username
                 email=user.email,
                 has_token=token is not None,
+                token_id=token.id if token is not None else None,
                 token_name=token.name if token is not None else None,
             )
         )
