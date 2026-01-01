@@ -389,6 +389,7 @@ async def _stream_claude_response(
                 sdk_messages.append(UserMessage(content=content))
 
     # Configure options
+    logger.info(f"Configuring Claude SDK with API key: {api_key[:20]}...")
     options = ClaudeAgentOptions(
         max_turns=10,
         env={"ANTHROPIC_API_KEY": api_key},
