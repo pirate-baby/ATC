@@ -19,11 +19,36 @@ User Subscription Token → Claude Agent SDK → Claude Code CLI → Anthropic A
 ❌ **DO NOT** bypass the Claude Code CLI in any way
 ❌ **DO NOT** use API headers like `x-api-key` or `anthropic-version`
 
-### Token Source
+### Token Source and Types
 
-All tokens are **Claude Code subscription tokens** supplied by users to the token pool rotation system. These are NOT direct Anthropic API keys.
+**CRITICAL: You MUST use Claude Code subscription tokens, NOT Anthropic API keys.**
 
-The Claude Code CLI handles all communication with the Anthropic API internally. Our code only interacts with the local CLI via the Claude Agent SDK.
+| Token Type | Prefix | Source | Usage |
+|------------|--------|--------|-------|
+| ✅ **Subscription Token** | `sk-ant-sid...` | `claude setup-token` command | **CORRECT - Use this** |
+| ❌ **API Key** | `sk-ant-api...` | console.anthropic.com | **WRONG - Do NOT use** |
+
+**How to get the correct token:**
+1. Install Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
+2. Run: `claude setup-token`
+3. Follow the authentication flow
+4. Copy the generated token (starts with `sk-ant-sid`)
+
+**Why subscription tokens are required:**
+- Subscription tokens authenticate against your Claude Pro/Max subscription
+- API keys are for direct API usage (bypasses Claude Code CLI)
+- The Claude Code CLI only accepts subscription tokens
+- API keys will fail or produce unexpected behavior
+
+All tokens in the pool rotation system are **Claude Code subscription tokens** supplied by users. The Claude Code CLI handles all communication with the Anthropic API internally using these subscription tokens. Our code only interacts with the local CLI via the Claude Agent SDK.
+
+**Token Pool Rotation System:**
+- ❌ NO environment variables for tokens - all managed in database
+- ✅ Users add tokens via `/claude-tokens` API endpoint in UI (Settings → Claude Token)
+- ✅ System automatically rotates through available tokens for fair distribution
+- ✅ Token usage tracked per token for monitoring and fairness
+- ✅ Failed/rate-limited tokens automatically marked and skipped in rotation
+- ✅ Backend workers pull tokens from pool when generating plans/tasks
 
 ---
 

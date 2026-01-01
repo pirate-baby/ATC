@@ -136,13 +136,18 @@ export function ClaudeTokenSettings() {
             for the team. Your token is encrypted and usage is distributed fairly.
           </p>
           <details className="token-setup-guide">
-            <summary>How to generate a token</summary>
+            <summary>How to generate a subscription token</summary>
             <ol>
               <li>Install Claude CLI: <code>npm install -g @anthropic-ai/claude-code</code></li>
               <li>Run: <code>claude setup-token</code></li>
-              <li>Follow the prompts to authenticate</li>
-              <li>Copy the generated token and paste it below</li>
+              <li>Follow the prompts to authenticate with your Claude subscription</li>
+              <li>Copy the generated token (starts with <code>sk-ant-sid</code>)</li>
+              <li>Paste the token below</li>
             </ol>
+            <p style={{marginTop: '1rem', padding: '0.5rem', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px'}}>
+              <strong>⚠️ Important:</strong> Use subscription tokens (<code>sk-ant-sid</code>) from <code>claude setup-token</code>,
+              NOT API keys (<code>sk-ant-api</code>) from console.anthropic.com. API keys will be rejected.
+            </p>
           </details>
         </div>
 
@@ -238,19 +243,19 @@ export function ClaudeTokenSettings() {
 
             <div className="form-group">
               <label htmlFor="token-value">
-                {token ? 'New Token (optional)' : 'Claude Token'}
+                {token ? 'New Subscription Token (optional)' : 'Claude Subscription Token'}
               </label>
               <input
                 type="password"
                 id="token-value"
                 value={tokenValue}
                 onChange={(e) => setTokenValue(e.target.value)}
-                placeholder="Paste your token here"
+                placeholder="sk-ant-sid... (from claude setup-token)"
                 required={!token}
                 autoComplete="off"
               />
               <span className="form-hint">
-                Generated via <code>claude setup-token</code>
+                Must start with <code>sk-ant-sid</code> (from <code>claude setup-token</code>)
               </span>
             </div>
 

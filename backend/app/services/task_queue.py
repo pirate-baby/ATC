@@ -86,12 +86,27 @@ async def run_plan_generation(
 
         logger.info(f"Calling Claude service to generate plan content for plan_id={plan_id}")
 
+        # Get subscription token from pool
+        from app.routers.claude_tokens import get_available_token
+
+        token_result = await get_available_token(db)
+        if not token_result:
+            logger.error(f"No available subscription tokens in pool for plan generation {plan_id}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = "No available subscription tokens. Users should add tokens via /claude-tokens API."
+            db.commit()
+            return {"success": False, "error": "No available subscription tokens"}
+
+        subscription_token, token_id = token_result
+        logger.info(f"Using subscription token {token_id} for plan generation {plan_id}")
+
         try:
             result = await claude_service.generate_plan(
                 plan_id=plan_uuid,
                 title=title,
                 context=context,
                 project_context=project_context,
+                subscription_token=subscription_token,
             )
 
             plan.content = result.content
@@ -185,12 +200,27 @@ async def run_task_spawning(
 
         logger.info(f"Calling Claude service to generate tasks for plan_id={plan_id}")
 
+        # Get subscription token from pool
+        from app.routers.claude_tokens import get_available_token
+
+        token_result = await get_available_token(db)
+        if not token_result:
+            logger.error(f"No available subscription tokens in pool for task spawning {plan_id}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = "No available subscription tokens. Users should add tokens via /claude-tokens API."
+            db.commit()
+            return {"success": False, "error": "No available subscription tokens"}
+
+        subscription_token, token_id = token_result
+        logger.info(f"Using subscription token {token_id} for task spawning {plan_id}")
+
         try:
             result = await claude_service.generate_tasks(
                 plan_id=plan_uuid,
                 title=title,
                 content=content,
                 project_context=project_context,
+                subscription_token=subscription_token,
             )
 
             logger.info(f"Claude returned {len(result.tasks)} tasks for plan_id={plan_id}")

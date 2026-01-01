@@ -24,7 +24,6 @@ x-db-environment: &db-environment
   GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
   GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-}
   REDIS_URL: redis://redis:6379
-  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
 services:
   # =============================================================================

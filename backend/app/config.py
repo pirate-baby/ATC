@@ -28,9 +28,6 @@ class Settings(BaseSettings):
     max_image_size_bytes: int = 10 * 1024 * 1024  # 10 MB
     allowed_image_types: list[str] = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 
-    # Anthropic API settings
-    anthropic_api_key: str | None = None
-
     # Redis settings for task queue
     redis_url: str = "redis://localhost:6379"
 

@@ -102,9 +102,30 @@ async def create_token(
             detail="You already have a token. Use PATCH to update or DELETE to remove it first.",
         )
 
-    # Validate the token format (basic check)
-    # Full validation would require testing against Claude API
+    # Validate the token format
     token_value = token_data.token.strip()
+
+    # CRITICAL: Only accept Claude Code subscription tokens (sk-ant-sid), NOT API keys (sk-ant-api)
+    if token_value.startswith('sk-ant-api'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Invalid token type: This appears to be an Anthropic API key (sk-ant-api), "
+                "but this system requires Claude Code subscription tokens (sk-ant-sid). "
+                "Please use 'claude setup-token' to generate a subscription token from your "
+                "Claude Pro or Max subscription."
+            ),
+        )
+
+    if not token_value.startswith('sk-ant-sid'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Invalid token format: Expected a Claude Code subscription token starting with "
+                "'sk-ant-sid'. Use 'claude setup-token' to generate one from your Claude Pro/Max "
+                "subscription. Do NOT use API keys from console.anthropic.com."
+            ),
+        )
 
     # Encrypt the token for storage
     encrypted = encrypt_token(token_value)
@@ -152,8 +173,33 @@ async def update_my_token(
         token.name = token_data.name
 
     if token_data.token is not None:
-        # New token provided - encrypt and store
-        encrypted = encrypt_token(token_data.token.strip())
+        # New token provided - validate format
+        token_value = token_data.token.strip()
+
+        # CRITICAL: Only accept Claude Code subscription tokens (sk-ant-sid), NOT API keys (sk-ant-api)
+        if token_value.startswith('sk-ant-api'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Invalid token type: This appears to be an Anthropic API key (sk-ant-api), "
+                    "but this system requires Claude Code subscription tokens (sk-ant-sid). "
+                    "Please use 'claude setup-token' to generate a subscription token from your "
+                    "Claude Pro or Max subscription."
+                ),
+            )
+
+        if not token_value.startswith('sk-ant-sid'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Invalid token format: Expected a Claude Code subscription token starting with "
+                    "'sk-ant-sid'. Use 'claude setup-token' to generate one from your Claude Pro/Max "
+                    "subscription. Do NOT use API keys from console.anthropic.com."
+                ),
+            )
+
+        # Encrypt and store
+        encrypted = encrypt_token(token_value)
         token.encrypted_token = encrypted
         # Reset status and error when token is replaced
         token.status = ClaudeTokenStatusEnum.ACTIVE
@@ -273,10 +319,16 @@ async def _validate_claude_token(token: str) -> TokenValidationResult:
         # Attempt a minimal query through Claude Code CLI
         # This tests the full subscription token flow
         message_received = False
-        async for message in query(prompt="test", options=options):
-            if isinstance(message, AssistantMessage):
-                message_received = True
-                break
+        message_iterator = query(prompt="test", options=options)
+        try:
+            async for message in message_iterator:
+                if isinstance(message, AssistantMessage):
+                    message_received = True
+                    break
+        finally:
+            # Properly close the query iterator to avoid resource leaks
+            if hasattr(message_iterator, 'aclose'):
+                await message_iterator.aclose()
 
         if message_received:
             return TokenValidationResult(valid=True, account_type="claude-code")

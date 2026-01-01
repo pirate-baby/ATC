@@ -246,13 +246,6 @@ async def generate_plan_content(
     """
     plan = get_or_404(db, PlanModel, plan_id)
 
-    # Check if Claude service is configured
-    if not claude_service.is_configured:
-        raise HTTPException(
-            status_code=503,
-            detail="Claude service not configured. Users should add subscription tokens via /claude-tokens API.",
-        )
-
     # Check if generation is already in progress
     if plan.processing_status == ProcessingStatus.GENERATING:
         raise HTTPException(
@@ -366,13 +359,6 @@ async def spawn_tasks_from_plan(
     Poll the /plans/{plan_id}/spawn-status endpoint to check progress.
     """
     plan = get_or_404(db, PlanModel, plan_id)
-
-    # Check if Claude service is configured
-    if not claude_service.is_configured:
-        raise HTTPException(
-            status_code=503,
-            detail="Claude service not configured. Users should add subscription tokens via /claude-tokens API.",
-        )
 
     # Check if plan is approved
     if plan.status != PlanTaskStatus.APPROVED:

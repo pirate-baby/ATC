@@ -91,6 +91,7 @@ async def generate_plan_content(
     title: str,
     context: str | None = None,
     project_context: str | None = None,
+    subscription_token: str | None = None,
 ) -> GenerationResult:
     """Generate plan content using the Claude Agent SDK.
 
@@ -99,17 +100,18 @@ async def generate_plan_content(
         title: Title of the plan
         context: Additional context provided by the user
         project_context: Context about the project (e.g., repository info)
+        subscription_token: Claude Code subscription token from pool rotation
 
     Returns:
         GenerationResult with the generated content
 
     Raises:
-        ClaudeNotConfiguredError: If Anthropic API key is not set
+        ClaudeNotConfiguredError: If no subscription token provided
         ClaudeGenerationError: If generation fails
     """
-    if not settings.anthropic_api_key:
+    if not subscription_token:
         raise ClaudeNotConfiguredError(
-            "Claude Code subscription token not configured. Users should add tokens via /claude-tokens API."
+            "No Claude Code subscription token available. Users should add tokens via /claude-tokens API."
         )
 
     # Build context section
@@ -143,7 +145,7 @@ async def generate_plan_content(
         # The CLI handles all API communication internally
         options = ClaudeAgentOptions(
             max_turns=1,  # Single turn for plan generation
-            env={"ANTHROPIC_API_KEY": settings.anthropic_api_key},
+            env={"ANTHROPIC_API_KEY": subscription_token},
         )
 
         # Use query() async iterator to collect responses
@@ -244,6 +246,7 @@ async def generate_tasks_from_plan(
     title: str,
     content: str,
     project_context: str | None = None,
+    subscription_token: str | None = None,
 ) -> TaskGenerationResult:
     """Generate tasks from an approved plan using Claude.
 
@@ -252,17 +255,18 @@ async def generate_tasks_from_plan(
         title: Title of the plan
         content: The plan content to decompose
         project_context: Context about the project
+        subscription_token: Claude Code subscription token from pool rotation
 
     Returns:
         TaskGenerationResult with the generated tasks
 
     Raises:
-        ClaudeNotConfiguredError: If Anthropic API key is not set
+        ClaudeNotConfiguredError: If no subscription token provided
         ClaudeGenerationError: If generation fails
     """
-    if not settings.anthropic_api_key:
+    if not subscription_token:
         raise ClaudeNotConfiguredError(
-            "Claude Code subscription token not configured. Users should add tokens via /claude-tokens API."
+            "No Claude Code subscription token available. Users should add tokens via /claude-tokens API."
         )
 
     # Build context section
@@ -293,7 +297,7 @@ async def generate_tasks_from_plan(
         # The CLI handles all API communication internally
         options = ClaudeAgentOptions(
             max_turns=1,
-            env={"ANTHROPIC_API_KEY": settings.anthropic_api_key},
+            env={"ANTHROPIC_API_KEY": subscription_token},
         )
 
         # Use query() async iterator to collect responses
@@ -438,23 +442,8 @@ class ClaudeService:
     """Service class for Claude API operations.
 
     Provides a structured interface for plan generation and other
-    Claude-powered operations.
+    Claude-powered operations using the token pool rotation system.
     """
-
-    def __init__(self):
-        self._validate_configuration()
-
-    def _validate_configuration(self) -> None:
-        """Validate that required configuration is present."""
-        if not settings.anthropic_api_key:
-            logger.warning(
-                "Claude Code subscription token not configured. Claude features will be unavailable."
-            )
-
-    @property
-    def is_configured(self) -> bool:
-        """Check if the Claude service is properly configured."""
-        return bool(settings.anthropic_api_key)
 
     async def generate_plan(
         self,
@@ -462,6 +451,7 @@ class ClaudeService:
         title: str,
         context: str | None = None,
         project_context: str | None = None,
+        subscription_token: str | None = None,
     ) -> GenerationResult:
         """Generate plan content.
 
@@ -470,12 +460,13 @@ class ClaudeService:
             title: Plan title
             context: Additional user-provided context
             project_context: Project-specific context
+            subscription_token: Claude Code subscription token from pool rotation
 
         Returns:
             GenerationResult with generated content
 
         Raises:
-            ClaudeNotConfiguredError: If API key not set
+            ClaudeNotConfiguredError: If no subscription token provided
             ClaudeGenerationError: If generation fails
         """
         return await generate_plan_content(
@@ -483,6 +474,7 @@ class ClaudeService:
             title=title,
             context=context,
             project_context=project_context,
+            subscription_token=subscription_token,
         )
 
     async def generate_tasks(
@@ -491,6 +483,7 @@ class ClaudeService:
         title: str,
         content: str,
         project_context: str | None = None,
+        subscription_token: str | None = None,
     ) -> TaskGenerationResult:
         """Generate tasks from an approved plan.
 
@@ -499,12 +492,13 @@ class ClaudeService:
             title: Plan title
             content: Plan content to decompose
             project_context: Project-specific context
+            subscription_token: Claude Code subscription token from pool rotation
 
         Returns:
             TaskGenerationResult with generated tasks
 
         Raises:
-            ClaudeNotConfiguredError: If API key not set
+            ClaudeNotConfiguredError: If no subscription token provided
             ClaudeGenerationError: If generation fails
         """
         return await generate_tasks_from_plan(
@@ -512,6 +506,7 @@ class ClaudeService:
             title=title,
             content=content,
             project_context=project_context,
+            subscription_token=subscription_token,
         )
 
 
