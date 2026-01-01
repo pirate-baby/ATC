@@ -303,6 +303,17 @@ export function ClaudeCodeConsolePage() {
     })
   }
 
+  const stopGeneration = () => {
+    // Close the WebSocket connection to stop generation
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      // Send a close message gracefully if needed, or just close
+      wsRef.current.close()
+    }
+    setIsStreaming(false)
+    currentThinkingRef.current = ''
+    currentOutputRef.current = ''
+  }
+
   return (
     <div className="page-content">
       <div className="page-header">
@@ -391,11 +402,7 @@ export function ClaudeCodeConsolePage() {
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
               </div>
-              {msg.messageType === 'thinking' && msg.isCollapsed ? (
-                <div className="message-collapsed">
-                  <em>Thinking collapsed (click ▶ to expand)</em>
-                </div>
-              ) : (
+              {!(msg.messageType === 'thinking' && msg.isCollapsed) && (
                 <div className={`message-content ${msg.messageType === 'thinking' ? 'thinking-content' : ''}`}>
                   <pre>{msg.content}</pre>
                 </div>
@@ -420,21 +427,33 @@ export function ClaudeCodeConsolePage() {
 
         {/* Input area */}
         <div className="console-input">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-            disabled={!isConnected || isStreaming}
-            rows={3}
-          />
-          <button
-            onClick={handleSendMessage}
-            disabled={!isConnected || isStreaming || !inputText.trim()}
-            className="btn-primary"
-          >
-            {isStreaming ? 'Sending...' : 'Send'}
-          </button>
+          {isStreaming ? (
+            <button
+              onClick={stopGeneration}
+              className="btn-stop"
+            >
+              <span className="stop-icon">■</span>
+              Stop Generation
+            </button>
+          ) : (
+            <>
+              <textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+                disabled={!isConnected}
+                rows={3}
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={!isConnected || !inputText.trim()}
+                className="btn-primary"
+              >
+                Send
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
