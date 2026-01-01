@@ -351,8 +351,16 @@ export function ClaudeCodeConsolePage() {
           {messages.map((msg, idx) => (
             <div key={idx} className={`message message-${msg.role} ${msg.messageType === 'thinking' ? 'message-thinking' : ''}`}>
               <div className="message-header">
-                <strong>{msg.role === 'user' ? 'You' : 'Claude Code'}</strong>
-                {msg.messageType === 'thinking' && <span className="thinking-label">(thinking)</span>}
+                <div className="message-header-left">
+                  <strong>{msg.role === 'user' ? 'You' : 'Claude Code'}</strong>
+                  {msg.messageType === 'thinking' && <span className="thinking-label">(thinking)</span>}
+                  {isStreaming && idx === messages.length - 1 && msg.role === 'assistant' && (
+                    <span className="working-indicator">
+                      <span className="spinner-small"></span>
+                      <span className="working-text">working...</span>
+                    </span>
+                  )}
+                </div>
                 <span className="message-time">
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
