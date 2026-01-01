@@ -136,8 +136,14 @@ async def debug_claude_console(websocket: WebSocket):
     print(f"====== Client host: {client_host} ======", flush=True)
 
     # Accept connection first
-    await websocket.accept()
-    logger.info(f"WebSocket connection accepted from {client_host}")
+    print("====== ABOUT TO ACCEPT WEBSOCKET ======", flush=True)
+    try:
+        await websocket.accept()
+        print("====== WEBSOCKET ACCEPTED ======", flush=True)
+        logger.info(f"WebSocket connection accepted from {client_host}")
+    except Exception as e:
+        print(f"====== ERROR ACCEPTING WEBSOCKET: {e} ======", flush=True)
+        raise
 
     # Then validate the token
     token = websocket.query_params.get("token")
