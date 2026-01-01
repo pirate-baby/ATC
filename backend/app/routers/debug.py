@@ -425,6 +425,7 @@ async def _stream_claude_response(
     options = ClaudeAgentOptions(
         max_turns=10,
         env={"CLAUDE_CODE_OAUTH_TOKEN": subscription_token},
+        dangerously_skip_permissions=True,
     )
 
     # If we have a session_id, resume the session to maintain conversation history
