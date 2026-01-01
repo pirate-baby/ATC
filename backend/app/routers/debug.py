@@ -426,6 +426,7 @@ async def _stream_claude_response(
         max_turns=10,
         env={"CLAUDE_CODE_OAUTH_TOKEN": subscription_token},
         permission_mode="bypassPermissions",
+        extended_thinking=True,  # Enable thinking blocks in responses
     )
 
     # If we have a session_id, resume the session to maintain conversation history
