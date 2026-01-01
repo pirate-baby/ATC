@@ -130,8 +130,10 @@ async def debug_claude_console(websocket: WebSocket):
         "timestamp": "..."
     }
     """
+    print("====== WEBSOCKET HANDLER CALLED ======", flush=True)
     client_host = websocket.client.host if websocket.client else "unknown"
     logger.info(f"WebSocket connection attempt from {client_host}")
+    print(f"====== Client host: {client_host} ======", flush=True)
 
     # Accept connection first
     await websocket.accept()
