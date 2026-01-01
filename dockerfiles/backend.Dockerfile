@@ -42,5 +42,8 @@ RUN uv pip install --system -e ".[dev]"
 # Note: In development, this is overridden by volume mount
 COPY . .
 
+# Run as non-root user (required for --dangerously-skip-permissions)
+USER 1000:1000
+
 # Default command (overridden in docker-compose for development)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
