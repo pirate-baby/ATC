@@ -113,6 +113,9 @@ async def debug_claude_console(websocket: WebSocket):
         "messages": [{"role": "user", "content": "..."}],
         "use_token_id": "uuid-optional"
     }
+    {
+        "type": "reset_session"
+    }
 
     Server-to-Client messages:
     {
@@ -134,12 +137,19 @@ async def debug_claude_console(websocket: WebSocket):
         "type": "done",
         "timestamp": "..."
     }
+    {
+        "type": "session_reset",
+        "timestamp": "..."
+    }
     """
     client_host = websocket.client.host if websocket.client else "unknown"
     logger.info(f"WebSocket connection attempt from {client_host}")
 
     await websocket.accept()
     logger.info(f"WebSocket connection accepted from {client_host}")
+
+    # Session state: maintain session_id across messages for conversation continuity
+    session_id: str | None = None
 
     token = websocket.query_params.get("token")
     if not token:
@@ -169,6 +179,15 @@ async def debug_claude_console(websocket: WebSocket):
             try:
                 data = await websocket.receive_json()
                 logger.debug(f"Received WebSocket message from user {current_user.id}: type={data.get('type')}")
+
+                if data.get("type") == "reset_session":
+                    # Reset the session
+                    session_id = None
+                    logger.info(f"Session reset for user {current_user.id}")
+                    await websocket.send_json(
+                        {"type": "session_reset", "timestamp": datetime.now(timezone.utc).isoformat()}
+                    )
+                    continue
 
                 if data.get("type") == "chat":
                     # Extract messages and optional token selection
@@ -252,10 +271,18 @@ async def debug_claude_console(websocket: WebSocket):
                     rate_limited = False
                     error_message = None
 
-                    logger.info(f"Starting Claude stream for user {current_user.id} with token {token_id}")
+                    logger.info(
+                        f"Starting Claude stream for user {current_user.id} with token {token_id}, "
+                        f"session_id={'<new>' if session_id is None else session_id}"
+                    )
 
                     try:
-                        async for message in _stream_claude_response(token_str, messages):
+                        async for message in _stream_claude_response(token_str, messages, session_id):
+                            # Capture session_id from system init message
+                            if message.get("type") == "session_init" and "session_id" in message:
+                                session_id = message["session_id"]
+                                logger.info(f"Captured session_id for user {current_user.id}: {session_id}")
+
                             await websocket.send_json(message)
 
                         success = True
@@ -346,23 +373,31 @@ class ClaudeRateLimitError(Exception):
 
 
 async def _stream_claude_response(
-    subscription_token: str, messages: list[dict]
+    subscription_token: str, messages: list[dict], session_id: str | None = None
 ) -> AsyncIterator[dict]:
     """
-    Stream Claude Code Agent SDK responses.
+    Stream Claude Code Agent SDK responses with session continuity.
 
     This uses the Claude Agent SDK to stream responses with thoughts and outputs.
     Uses subscription tokens (OAuth tokens starting with sk-ant-oat01-).
+
+    Args:
+        subscription_token: Claude OAuth token for authentication
+        messages: List of message dictionaries (for display purposes only when resuming)
+        session_id: Optional session ID to resume conversation with full history
+
+    Yields:
+        Message dictionaries with type, content, and timestamp
     """
-    logger.debug(f"Initializing Claude Agent SDK stream with {len(messages)} messages")
+    logger.debug(f"Initializing Claude Agent SDK stream with {len(messages)} messages, session_id={session_id}")
 
     try:
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeAgentOptions,
+            SystemMessage,
             TextBlock,
             ThinkingBlock,
-            UserMessage,
             query,
         )
     except ImportError as e:
@@ -372,17 +407,18 @@ async def _stream_claude_response(
             detail="Claude Agent SDK not installed",
         ) from e
 
-    # Convert messages to SDK format
-    sdk_messages = []
-    for msg in messages:
+    # Extract the last user message as the prompt
+    # When resuming, the SDK automatically loads full conversation history,
+    # so we only need to provide the new user message
+    last_user_message = None
+    for msg in reversed(messages):
         if msg.get("role") == "user":
-            content = msg.get("content", "")
-            # Handle both string and content blocks
-            if isinstance(content, str):
-                sdk_messages.append(UserMessage(content=content))
-            else:
-                # Content blocks (for images, etc.)
-                sdk_messages.append(UserMessage(content=content))
+            last_user_message = msg.get("content", "")
+            break
+
+    if not last_user_message:
+        logger.error("No user message found in messages list")
+        raise ValueError("No user message found")
 
     # Configure options with subscription token (OAuth token)
     logger.info(f"Configuring Claude SDK with subscription token: {subscription_token[:20]}...")
@@ -391,24 +427,35 @@ async def _stream_claude_response(
         env={"CLAUDE_CODE_OAUTH_TOKEN": subscription_token},
     )
 
+    # If we have a session_id, resume the session to maintain conversation history
+    if session_id:
+        logger.info(f"Resuming session: {session_id}")
+        options.resume = session_id
+
     # Stream responses
     try:
-        # For a simple chat, we just pass the last user message
-        last_user_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                last_user_message = msg.get("content", "")
-                break
-
-        if not last_user_message:
-            logger.error("No user message found in messages list")
-            raise ValueError("No user message found")
-
-        logger.info(f"Starting Claude SDK query with message length: {len(str(last_user_message))}")
+        logger.info(
+            f"Starting Claude SDK query with message length: {len(str(last_user_message))}, "
+            f"resume={'yes' if session_id else 'no'}"
+        )
 
         message_count = 0
         async for message in query(prompt=last_user_message, options=options):
             timestamp = datetime.now(timezone.utc).isoformat()
+
+            # Capture session_id from system init message
+            if isinstance(message, SystemMessage):
+                if hasattr(message, "subtype") and message.subtype == "init":
+                    init_session_id = getattr(message, "session_id", None)
+                    if not init_session_id and hasattr(message, "data"):
+                        init_session_id = message.data.get("session_id")
+                    if init_session_id:
+                        logger.info(f"Captured new session_id from init message: {init_session_id}")
+                        yield {
+                            "type": "session_init",
+                            "session_id": init_session_id,
+                            "timestamp": timestamp,
+                        }
 
             if isinstance(message, AssistantMessage):
                 for block in message.content:
