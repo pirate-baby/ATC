@@ -15,6 +15,8 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: string
+  messageType?: 'thinking' | 'output' | 'user_question' // Type of assistant message
+  isThinking?: boolean // For current streaming thinking message
 }
 
 interface StreamMessage {
@@ -38,7 +40,8 @@ export function ClaudeCodeConsolePage() {
 
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const currentAssistantMessageRef = useRef<string>('')
+  const currentThinkingRef = useRef<string>('') // Current streaming thinking content
+  const currentOutputRef = useRef<string>('') // Current streaming output content
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -134,15 +137,19 @@ export function ClaudeCodeConsolePage() {
         break
 
       case 'thought':
-        // Append to current assistant message (thinking section)
-        currentAssistantMessageRef.current += `\n\n**Thinking:**\n${msg.content || msg.thinking || ''}`
-        updateLastAssistantMessage()
+        // Update or create thinking message - thinking messages replace previous thinking
+        currentThinkingRef.current += (msg.content || msg.thinking || '')
+        updateThinkingMessage()
         break
 
       case 'output':
-        // Append to current assistant message
-        currentAssistantMessageRef.current += (msg.content || msg.output || '')
-        updateLastAssistantMessage()
+        // When we get output, finalize any thinking message first
+        if (currentThinkingRef.current) {
+          finalizeThinkingMessage()
+        }
+        // Append to current output message
+        currentOutputRef.current += (msg.content || msg.output || '')
+        updateOutputMessage()
         break
 
       case 'error':
@@ -151,31 +158,86 @@ export function ClaudeCodeConsolePage() {
         break
 
       case 'done':
+        // Finalize any pending messages
+        if (currentThinkingRef.current) {
+          finalizeThinkingMessage()
+        }
+        if (currentOutputRef.current) {
+          finalizeOutputMessage()
+        }
         setIsStreaming(false)
-        currentAssistantMessageRef.current = ''
+        currentThinkingRef.current = ''
+        currentOutputRef.current = ''
         break
     }
   }
 
-  const updateLastAssistantMessage = () => {
+  const updateThinkingMessage = () => {
     setMessages(prev => {
       const newMessages = [...prev]
       const lastMessage = newMessages[newMessages.length - 1]
 
-      if (lastMessage && lastMessage.role === 'assistant') {
-        lastMessage.content = currentAssistantMessageRef.current
+      // Update or create streaming thinking message
+      if (lastMessage && lastMessage.role === 'assistant' && lastMessage.isThinking) {
+        // Update existing thinking message
+        lastMessage.content = currentThinkingRef.current
         lastMessage.timestamp = new Date().toISOString()
       } else {
-        // Create new assistant message
+        // Create new thinking message
         newMessages.push({
           role: 'assistant',
-          content: currentAssistantMessageRef.current,
+          content: currentThinkingRef.current,
           timestamp: new Date().toISOString(),
+          messageType: 'thinking',
+          isThinking: true,
         })
       }
 
       return newMessages
     })
+  }
+
+  const finalizeThinkingMessage = () => {
+    setMessages(prev => {
+      const newMessages = [...prev]
+      const lastMessage = newMessages[newMessages.length - 1]
+
+      if (lastMessage && lastMessage.isThinking) {
+        // Mark thinking as finalized
+        lastMessage.isThinking = false
+      }
+
+      return newMessages
+    })
+    currentThinkingRef.current = ''
+  }
+
+  const updateOutputMessage = () => {
+    setMessages(prev => {
+      const newMessages = [...prev]
+      const lastMessage = newMessages[newMessages.length - 1]
+
+      // Update or create streaming output message
+      if (lastMessage && lastMessage.role === 'assistant' && lastMessage.messageType === 'output' && !lastMessage.isThinking) {
+        // Update existing output message
+        lastMessage.content = currentOutputRef.current
+        lastMessage.timestamp = new Date().toISOString()
+      } else {
+        // Create new output message
+        newMessages.push({
+          role: 'assistant',
+          content: currentOutputRef.current,
+          timestamp: new Date().toISOString(),
+          messageType: 'output',
+        })
+      }
+
+      return newMessages
+    })
+  }
+
+  const finalizeOutputMessage = () => {
+    currentOutputRef.current = ''
   }
 
   const handleSendMessage = () => {
@@ -193,7 +255,8 @@ export function ClaudeCodeConsolePage() {
     setInputText('')
     setIsStreaming(true)
     setError(null)
-    currentAssistantMessageRef.current = ''
+    currentThinkingRef.current = ''
+    currentOutputRef.current = ''
 
     // Send to WebSocket
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -219,7 +282,8 @@ export function ClaudeCodeConsolePage() {
 
   const clearMessages = () => {
     setMessages([])
-    currentAssistantMessageRef.current = ''
+    currentThinkingRef.current = ''
+    currentOutputRef.current = ''
   }
 
   return (
@@ -283,14 +347,15 @@ export function ClaudeCodeConsolePage() {
           )}
 
           {messages.map((msg, idx) => (
-            <div key={idx} className={`message message-${msg.role}`}>
+            <div key={idx} className={`message message-${msg.role} ${msg.messageType === 'thinking' ? 'message-thinking' : ''}`}>
               <div className="message-header">
                 <strong>{msg.role === 'user' ? 'You' : 'Claude Code'}</strong>
+                {msg.messageType === 'thinking' && <span className="thinking-label">(thinking)</span>}
                 <span className="message-time">
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
               </div>
-              <div className="message-content">
+              <div className={`message-content ${msg.messageType === 'thinking' ? 'thinking-content' : ''}`}>
                 <pre>{msg.content}</pre>
               </div>
             </div>
