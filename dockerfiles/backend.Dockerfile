@@ -42,6 +42,9 @@ RUN uv pip install --system -e ".[dev]"
 # Note: In development, this is overridden by volume mount
 COPY . .
 
+# Set proper ownership and permissions for non-root user
+RUN chown -R 1000:1000 /app && chmod -R 770 /app
+
 # Run as non-root user (required for --dangerously-skip-permissions)
 USER 1000:1000
 
