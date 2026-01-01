@@ -135,22 +135,12 @@ async def debug_claude_console(websocket: WebSocket):
         "timestamp": "..."
     }
     """
-    print("====== WEBSOCKET HANDLER CALLED ======", flush=True)
     client_host = websocket.client.host if websocket.client else "unknown"
     logger.info(f"WebSocket connection attempt from {client_host}")
-    print(f"====== Client host: {client_host} ======", flush=True)
 
-    # Accept connection first
-    print("====== ABOUT TO ACCEPT WEBSOCKET ======", flush=True)
-    try:
-        await websocket.accept()
-        print("====== WEBSOCKET ACCEPTED ======", flush=True)
-        logger.info(f"WebSocket connection accepted from {client_host}")
-    except Exception as e:
-        print(f"====== ERROR ACCEPTING WEBSOCKET: {e} ======", flush=True)
-        raise
+    await websocket.accept()
+    logger.info(f"WebSocket connection accepted from {client_host}")
 
-    # Then validate the token
     token = websocket.query_params.get("token")
     if not token:
         logger.warning(f"WebSocket missing token from {client_host}")
@@ -356,15 +346,13 @@ class ClaudeRateLimitError(Exception):
 
 
 async def _stream_claude_response(
-    api_key: str, messages: list[dict]
+    subscription_token: str, messages: list[dict]
 ) -> AsyncIterator[dict]:
     """
     Stream Claude Code Agent SDK responses.
 
     This uses the Claude Agent SDK to stream responses with thoughts and outputs.
-
-    IMPORTANT: The api_key parameter is a Claude Code subscription token that gets
-    passed to the Claude Code CLI. It is NOT used for direct API calls.
+    Uses subscription tokens (OAuth tokens starting with sk-ant-oat01-).
     """
     logger.debug(f"Initializing Claude Agent SDK stream with {len(messages)} messages")
 
@@ -396,13 +384,11 @@ async def _stream_claude_response(
                 # Content blocks (for images, etc.)
                 sdk_messages.append(UserMessage(content=content))
 
-    # Configure options
-    # Pass subscription token to Claude Code CLI via environment variable
-    # The CLI handles all API communication internally
-    logger.info(f"Configuring Claude SDK with subscription token: {api_key[:20]}...")
+    # Configure options with subscription token (OAuth token)
+    logger.info(f"Configuring Claude SDK with subscription token: {subscription_token[:20]}...")
     options = ClaudeAgentOptions(
         max_turns=10,
-        env={"ANTHROPIC_API_KEY": api_key},
+        env={"CLAUDE_CODE_OAUTH_TOKEN": subscription_token},
     )
 
     # Stream responses
