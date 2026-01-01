@@ -364,7 +364,6 @@ async def _stream_claude_response(
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeAgentOptions,
-            OutputBlock,
             TextBlock,
             ThinkingBlock,
             UserMessage,
@@ -430,14 +429,6 @@ async def _stream_claude_response(
                         yield {
                             "type": "output",
                             "content": block.text,
-                            "timestamp": timestamp,
-                        }
-                    elif isinstance(block, OutputBlock):
-                        message_count += 1
-                        logger.debug(f"Yielding output block #{message_count}")
-                        yield {
-                            "type": "output",
-                            "content": block.output,
                             "timestamp": timestamp,
                         }
 
