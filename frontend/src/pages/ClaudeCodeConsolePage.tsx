@@ -91,6 +91,7 @@ export function ClaudeCodeConsolePage() {
     const host = window.location.host
     const wsUrl = `${protocol}//${host}/api/v1/ws/debug/claude-console?token=${token}`
 
+    console.log('Connecting to WebSocket URL:', wsUrl)
     const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
