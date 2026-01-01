@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '../utils/api'
 import './ClaudeCodeConsolePage.css'
+// Updated thinking stream UI
 
 interface UserWithToken {
   user_id: string
@@ -138,6 +139,7 @@ export function ClaudeCodeConsolePage() {
 
       case 'thought':
         // Update or create thinking message - thinking messages replace previous thinking
+        console.log('🧠 THOUGHT MESSAGE RECEIVED (NEW CODE):', msg.content?.substring(0, 50))
         currentThinkingRef.current += (msg.content || msg.thinking || '')
         updateThinkingMessage()
         break
@@ -398,3 +400,4 @@ export function ClaudeCodeConsolePage() {
     </div>
   )
 }
+
