@@ -24,7 +24,7 @@ interface ChatMessage {
 }
 
 interface StreamMessage {
-  type: 'thought' | 'output' | 'error' | 'done' | 'status' | 'tool_use'
+  type: 'thought' | 'output' | 'error' | 'done' | 'status' | 'tool_use' | 'user_question'
   content?: string
   thinking?: string
   output?: string
@@ -32,6 +32,7 @@ interface StreamMessage {
   status?: string
   tool?: string
   input?: Record<string, any>
+  question?: string
   timestamp: string
 }
 
@@ -173,6 +174,24 @@ export function ClaudeCodeConsolePage() {
             toolInput: msg.input,
           }
         ])
+        break
+
+      case 'user_question':
+        // Display user question prominently
+        console.log('❓ Claude is asking:', msg.question)
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: msg.question || 'Question from Claude',
+            timestamp: msg.timestamp,
+            messageType: 'user_question',
+          }
+        ])
+        // Scroll to bottom to show the question
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
         break
 
       case 'error':
@@ -395,7 +414,7 @@ export function ClaudeCodeConsolePage() {
           )}
 
           {messages.map((msg, idx) => (
-            <div key={idx} className={`message message-${msg.role} ${msg.messageType === 'thinking' ? 'message-thinking' : ''} ${msg.messageType === 'tool_use' ? 'message-tool-use' : ''}`}>
+            <div key={idx} className={`message message-${msg.role} ${msg.messageType === 'thinking' ? 'message-thinking' : ''} ${msg.messageType === 'tool_use' ? 'message-tool-use' : ''} ${msg.messageType === 'user_question' ? 'message-user-question' : ''}`}>
               <div className="message-header">
                 <div className="message-header-left">
                   <strong>{msg.role === 'user' ? 'You' : 'Claude Code'}</strong>
@@ -413,6 +432,9 @@ export function ClaudeCodeConsolePage() {
                   )}
                   {msg.messageType === 'tool_use' && (
                     <span className="tool-use-label">🔧 tool use</span>
+                  )}
+                  {msg.messageType === 'user_question' && (
+                    <span className="user-question-label">❓ Claude is asking you a question</span>
                   )}
                   {isStreaming && idx === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="working-indicator">

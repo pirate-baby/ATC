@@ -102,6 +102,22 @@
   border-style: dashed !important;
 }
 
+.message-user-question {
+  background: #fff3cd !important;
+  border: 2px solid #ffc107 !important;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+  animation: highlight-pulse 2s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.01);
+  }
+}
+
 .message-header {
   display: flex;
   justify-content: space-between;
@@ -165,6 +181,21 @@
 }
 
 .thinking-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #586069);
+  font-weight: normal;
+}
+
+.user-question-label {
+  font-size: 0.75rem;
+  color: #856404;
+  font-weight: 600;
+  background: rgba(255, 193, 7, 0.2);
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+}
+
+.tool-use-label {
   font-size: 0.75rem;
   color: var(--text-secondary, #586069);
   font-weight: normal;

@@ -510,12 +510,21 @@ async def _stream_claude_response(
                         logger.debug(
                             f"Yielding tool_use #{message_count}: {block.name}"
                         )
-                        yield {
-                            "type": "tool_use",
-                            "tool": block.name,
-                            "input": block.input,
-                            "timestamp": timestamp,
-                        }
+
+                        # Special handling for AskUserQuestion tool
+                        if block.name == "AskUserQuestion":
+                            yield {
+                                "type": "user_question",
+                                "question": block.input.get("question", ""),
+                                "timestamp": timestamp,
+                            }
+                        else:
+                            yield {
+                                "type": "tool_use",
+                                "tool": block.name,
+                                "input": block.input,
+                                "timestamp": timestamp,
+                            }
 
         logger.info(f"Claude SDK stream completed successfully with {message_count} message deltas")
 
