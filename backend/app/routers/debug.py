@@ -398,6 +398,7 @@ async def _stream_claude_response(
             SystemMessage,
             TextBlock,
             ThinkingBlock,
+            ToolUseBlock,
             query,
         )
     except ImportError as e:
@@ -502,6 +503,19 @@ async def _stream_claude_response(
                                 "timestamp": timestamp,
                             }
                             text_blocks_prev_len[idx] = len(full_content)
+
+                    elif isinstance(block, ToolUseBlock):
+                        # Send tool use information to frontend
+                        message_count += 1
+                        logger.debug(
+                            f"Yielding tool_use #{message_count}: {block.name}"
+                        )
+                        yield {
+                            "type": "tool_use",
+                            "tool": block.name,
+                            "input": block.input,
+                            "timestamp": timestamp,
+                        }
 
         logger.info(f"Claude SDK stream completed successfully with {message_count} message deltas")
 

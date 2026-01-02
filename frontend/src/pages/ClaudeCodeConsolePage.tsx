@@ -16,9 +16,11 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: string
-  messageType?: 'thinking' | 'output' | 'user_question' // Type of assistant message
+  messageType?: 'thinking' | 'output' | 'user_question' | 'tool_use' // Type of assistant message
   isThinking?: boolean // For current streaming thinking message
   isCollapsed?: boolean // For thinking messages - whether they are collapsed
+  toolName?: string // For tool_use messages
+  toolInput?: Record<string, any> // For tool_use messages
 }
 
 interface StreamMessage {
@@ -158,9 +160,19 @@ export function ClaudeCodeConsolePage() {
         break
 
       case 'tool_use':
-        // Log tool use but don't display to user (tools are implementation details)
+        // Display tool use as a message
         console.log('🔧 Tool used:', msg.tool, msg.input)
-        // Don't change isStreaming state - let the session continue
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `Using tool: ${msg.tool}`,
+            timestamp: msg.timestamp,
+            messageType: 'tool_use',
+            toolName: msg.tool,
+            toolInput: msg.input,
+          }
+        ])
         break
 
       case 'error':
@@ -383,7 +395,7 @@ export function ClaudeCodeConsolePage() {
           )}
 
           {messages.map((msg, idx) => (
-            <div key={idx} className={`message message-${msg.role} ${msg.messageType === 'thinking' ? 'message-thinking' : ''}`}>
+            <div key={idx} className={`message message-${msg.role} ${msg.messageType === 'thinking' ? 'message-thinking' : ''} ${msg.messageType === 'tool_use' ? 'message-tool-use' : ''}`}>
               <div className="message-header">
                 <div className="message-header-left">
                   <strong>{msg.role === 'user' ? 'You' : 'Claude Code'}</strong>
@@ -398,6 +410,9 @@ export function ClaudeCodeConsolePage() {
                         {msg.isCollapsed ? '▶' : '▼'}
                       </button>
                     </>
+                  )}
+                  {msg.messageType === 'tool_use' && (
+                    <span className="tool-use-label">🔧 tool use</span>
                   )}
                   {isStreaming && idx === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="working-indicator">
