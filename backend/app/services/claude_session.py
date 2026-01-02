@@ -10,11 +10,20 @@ the Claude Code CLI which handles API interactions internally using subscription
 """
 
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator
-from uuid import UUID
+
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    SystemMessage,
+    TextBlock,
+    ThinkingBlock,
+    ToolUseBlock,
+    query,
+)
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +46,10 @@ class ClaudeSessionNotFoundError(ClaudeSessionError):
     pass
 
 
-@dataclass
-class SessionMessage:
+class SessionMessage(BaseModel):
     """A message in a Claude session stream."""
 
-    type: str  # thought, output, error, done, session_init, tool_use, user_question
+    type: str = Field(..., description="Message type: thought, output, error, done, session_init, tool_use, user_question")
     content: str | None = None
     timestamp: str | None = None
     session_id: str | None = None
@@ -50,8 +58,7 @@ class SessionMessage:
     question: str | None = None
 
 
-@dataclass
-class SessionConfig:
+class SessionConfig(BaseModel):
     """Configuration for a Claude session."""
 
     subscription_token: str
@@ -149,6 +156,157 @@ class ClaudeSession:
         """
         return self._sdk_session_id
 
+    def _create_agent_options(self) -> ClaudeAgentOptions:
+        """Create Claude Agent SDK options from session config.
+
+        Returns:
+            Configured ClaudeAgentOptions instance
+        """
+        logger.debug(
+            f"Configuring Claude SDK for session '{self.session_key}': "
+            f"cwd={self.config.cwd}, max_turns={self.config.max_turns}"
+        )
+
+        options = ClaudeAgentOptions(
+            max_turns=self.config.max_turns,
+            cwd=str(self.config.cwd),
+            env={"CLAUDE_CODE_OAUTH_TOKEN": self.config.subscription_token},
+            permission_mode=self.config.permission_mode,
+            max_thinking_tokens=self.config.max_thinking_tokens,
+        )
+
+        # If we have a session_id, resume the session to maintain conversation history
+        if self._sdk_session_id:
+            logger.info(f"Resuming SDK session: {self._sdk_session_id}")
+            options.resume = self._sdk_session_id
+
+        return options
+
+    def _handle_system_message(self, message: SystemMessage, timestamp: str) -> SessionMessage | None:
+        """Handle system messages from Claude SDK.
+
+        Args:
+            message: SystemMessage from Claude SDK
+            timestamp: ISO timestamp for the message
+
+        Returns:
+            SessionMessage if session init detected, None otherwise
+        """
+        if hasattr(message, "subtype") and message.subtype == "init":
+            init_session_id = getattr(message, "session_id", None)
+            if not init_session_id and hasattr(message, "data"):
+                init_session_id = message.data.get("session_id")
+            if init_session_id:
+                self._sdk_session_id = init_session_id
+                self._initialized = True
+                logger.info(
+                    f"Captured SDK session_id for session '{self.session_key}': "
+                    f"{init_session_id}"
+                )
+                return SessionMessage(
+                    type="session_init",
+                    session_id=init_session_id,
+                    timestamp=timestamp,
+                )
+        return None
+
+    def _handle_thinking_block(
+        self,
+        block: ThinkingBlock,
+        idx: int,
+        thinking_blocks_prev_len: dict[int, int],
+        timestamp: str,
+    ) -> SessionMessage | None:
+        """Handle thinking blocks with delta tracking.
+
+        Args:
+            block: ThinkingBlock from Claude SDK
+            idx: Block index in the message
+            thinking_blocks_prev_len: Dict tracking previous lengths
+            timestamp: ISO timestamp for the message
+
+        Returns:
+            SessionMessage with thought delta if new content, None otherwise
+        """
+        full_content = block.thinking
+        prev_len = thinking_blocks_prev_len.get(idx, 0)
+        delta = full_content[prev_len:]
+
+        if delta:
+            logger.debug(
+                f"Session '{self.session_key}' thought delta: "
+                f"{len(delta)} new chars (total: {len(full_content)})"
+            )
+            thinking_blocks_prev_len[idx] = len(full_content)
+            return SessionMessage(
+                type="thought",
+                content=delta,
+                timestamp=timestamp,
+            )
+        return None
+
+    def _handle_text_block(
+        self,
+        block: TextBlock,
+        idx: int,
+        text_blocks_prev_len: dict[int, int],
+        timestamp: str,
+    ) -> SessionMessage | None:
+        """Handle text blocks with delta tracking.
+
+        Args:
+            block: TextBlock from Claude SDK
+            idx: Block index in the message
+            text_blocks_prev_len: Dict tracking previous lengths
+            timestamp: ISO timestamp for the message
+
+        Returns:
+            SessionMessage with text delta if new content, None otherwise
+        """
+        full_content = block.text
+        prev_len = text_blocks_prev_len.get(idx, 0)
+        delta = full_content[prev_len:]
+
+        if delta:
+            logger.debug(
+                f"Session '{self.session_key}' text delta: "
+                f"{len(delta)} new chars (total: {len(full_content)})"
+            )
+            text_blocks_prev_len[idx] = len(full_content)
+            return SessionMessage(
+                type="output",
+                content=delta,
+                timestamp=timestamp,
+            )
+        return None
+
+    def _handle_tool_use_block(self, block: ToolUseBlock, timestamp: str) -> SessionMessage:
+        """Handle tool use blocks.
+
+        Args:
+            block: ToolUseBlock from Claude SDK
+            timestamp: ISO timestamp for the message
+
+        Returns:
+            SessionMessage with tool use information
+        """
+        logger.debug(f"Session '{self.session_key}' tool_use: {block.name}")
+
+        # Special handling for AskUserQuestion tool
+        if block.name == "AskUserQuestion":
+            return SessionMessage(
+                type="user_question",
+                question=block.input.get("question", ""),
+                timestamp=timestamp,
+            )
+        else:
+            return SessionMessage(
+                type="tool_use",
+                tool=block.name,
+                input=block.input,
+                timestamp=timestamp,
+            )
+
     async def send_message(
         self,
         user_message: str,
@@ -170,136 +328,47 @@ class ClaudeSession:
             f"resume={'yes' if self._sdk_session_id else 'no'}"
         )
 
-        try:
-            from claude_agent_sdk import (
-                AssistantMessage,
-                ClaudeAgentOptions,
-                SystemMessage,
-                TextBlock,
-                ThinkingBlock,
-                ToolUseBlock,
-                query,
-            )
-        except ImportError as e:
-            logger.error(f"Claude Agent SDK not installed: {e!r}", exc_info=True)
-            raise ClaudeSessionError(
-                "Claude Agent SDK not installed. Run: pip install claude-agent-sdk"
-            ) from e
+        options = self._create_agent_options()
 
-        # Configure options with subscription token (OAuth token)
-        logger.debug(
-            f"Configuring Claude SDK for session '{self.session_key}': "
-            f"cwd={self.config.cwd}, max_turns={self.config.max_turns}"
-        )
-
-        options = ClaudeAgentOptions(
-            max_turns=self.config.max_turns,
-            cwd=str(self.config.cwd),
-            env={"CLAUDE_CODE_OAUTH_TOKEN": self.config.subscription_token},
-            permission_mode=self.config.permission_mode,
-            max_thinking_tokens=self.config.max_thinking_tokens,
-        )
-
-        # If we have a session_id, resume the session to maintain conversation history
-        if self._sdk_session_id:
-            logger.info(f"Resuming SDK session: {self._sdk_session_id}")
-            options.resume = self._sdk_session_id
-
-        # Stream responses with delta tracking to avoid content duplication
         try:
             logger.debug(
                 f"Starting Claude SDK query for session '{self.session_key}': "
                 f"message_length={len(user_message)}"
             )
 
-            message_count = 0
             # Track previous lengths for each block to send only deltas
             thinking_blocks_prev_len: dict[int, int] = {}
             text_blocks_prev_len: dict[int, int] = {}
+            message_count = 0
 
             async for message in query(prompt=user_message, options=options):
                 timestamp = datetime.now(timezone.utc).isoformat()
 
-                # Capture session_id from system init message
+                # Handle system init messages
                 if isinstance(message, SystemMessage):
-                    if hasattr(message, "subtype") and message.subtype == "init":
-                        init_session_id = getattr(message, "session_id", None)
-                        if not init_session_id and hasattr(message, "data"):
-                            init_session_id = message.data.get("session_id")
-                        if init_session_id:
-                            self._sdk_session_id = init_session_id
-                            self._initialized = True
-                            logger.info(
-                                f"Captured SDK session_id for session '{self.session_key}': "
-                                f"{init_session_id}"
-                            )
-                            yield SessionMessage(
-                                type="session_init",
-                                session_id=init_session_id,
-                                timestamp=timestamp,
-                            )
+                    session_msg = self._handle_system_message(message, timestamp)
+                    if session_msg:
+                        yield session_msg
 
+                # Handle assistant messages with content blocks
                 if isinstance(message, AssistantMessage):
                     for idx, block in enumerate(message.content):
+                        session_msg = None
+
                         if isinstance(block, ThinkingBlock):
-                            # Get the full content and calculate delta
-                            full_content = block.thinking
-                            prev_len = thinking_blocks_prev_len.get(idx, 0)
-                            delta = full_content[prev_len:]
-
-                            if delta:  # Only send if there's new content
-                                message_count += 1
-                                logger.debug(
-                                    f"Session '{self.session_key}' thought delta #{message_count}: "
-                                    f"{len(delta)} new chars (total: {len(full_content)})"
-                                )
-                                yield SessionMessage(
-                                    type="thought",
-                                    content=delta,
-                                    timestamp=timestamp,
-                                )
-                                thinking_blocks_prev_len[idx] = len(full_content)
-
-                        elif isinstance(block, TextBlock):
-                            # Get the full content and calculate delta
-                            full_content = block.text
-                            prev_len = text_blocks_prev_len.get(idx, 0)
-                            delta = full_content[prev_len:]
-
-                            if delta:  # Only send if there's new content
-                                message_count += 1
-                                logger.debug(
-                                    f"Session '{self.session_key}' text delta #{message_count}: "
-                                    f"{len(delta)} new chars (total: {len(full_content)})"
-                                )
-                                yield SessionMessage(
-                                    type="output",
-                                    content=delta,
-                                    timestamp=timestamp,
-                                )
-                                text_blocks_prev_len[idx] = len(full_content)
-
-                        elif isinstance(block, ToolUseBlock):
-                            # Send tool use information
-                            message_count += 1
-                            logger.debug(
-                                f"Session '{self.session_key}' tool_use #{message_count}: {block.name}"
+                            session_msg = self._handle_thinking_block(
+                                block, idx, thinking_blocks_prev_len, timestamp
                             )
+                        elif isinstance(block, TextBlock):
+                            session_msg = self._handle_text_block(
+                                block, idx, text_blocks_prev_len, timestamp
+                            )
+                        elif isinstance(block, ToolUseBlock):
+                            session_msg = self._handle_tool_use_block(block, timestamp)
 
-                            # Special handling for AskUserQuestion tool
-                            if block.name == "AskUserQuestion":
-                                yield SessionMessage(
-                                    type="user_question",
-                                    question=block.input.get("question", ""),
-                                    timestamp=timestamp,
-                                )
-                            else:
-                                yield SessionMessage(
-                                    type="tool_use",
-                                    tool=block.name,
-                                    input=block.input,
-                                    timestamp=timestamp,
-                                )
+                        if session_msg:
+                            message_count += 1
+                            yield session_msg
 
             logger.info(
                 f"Session '{self.session_key}' stream completed successfully "
