@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # Git worktree settings
     worktrees_base_path: Path = Path("/var/lib/atc/worktrees")
+    atc_repo_url: str = "https://github.com/vibe-teams/atc.git"  # ATC repo for debug worktree
 
     # File upload settings
     uploads_base_path: Path = Path("/var/lib/atc/uploads")

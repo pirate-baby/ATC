@@ -8,6 +8,7 @@ the Claude Code CLI which handles API interactions internally using user subscri
 import asyncio
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import AsyncIterator
 from uuid import UUID
 
@@ -16,16 +17,50 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, RequireAuth
+from app.config import settings
 from app.database import get_db
 from app.models.claude_token import ClaudeToken as ClaudeTokenModel
 from app.models.user import User as UserModel
 from app.routers.claude_tokens import get_available_token, record_token_usage
 from app.schemas.base import StandardError
 from app.services.encryption import decrypt_token
+from app.services.git import GitService
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+# Initialize debug worktree on module load
+_debug_worktree_path: Path | None = None
+
+
+def _get_debug_worktree() -> Path:
+    """Get or initialize the debug worktree for the debug console.
+
+    This creates a persistent worktree at /var/lib/atc/worktrees/debug
+    that stays isolated from the main repo directory.
+    """
+    global _debug_worktree_path
+
+    if _debug_worktree_path is not None:
+        return _debug_worktree_path
+
+    try:
+        git_service = GitService(settings.worktrees_base_path)
+        _debug_worktree_path = git_service.ensure_debug_worktree(
+            git_url=settings.atc_repo_url,
+            base_branch="main"
+        )
+        logger.info(f"Debug worktree initialized at: {_debug_worktree_path}")
+        return _debug_worktree_path
+    except Exception as e:
+        logger.error(f"Failed to initialize debug worktree: {e!r}", exc_info=True)
+        # Fall back to /tmp if worktree creation fails
+        fallback = Path("/tmp/atc-debug")
+        fallback.mkdir(exist_ok=True)
+        logger.warning(f"Using fallback debug directory: {fallback}")
+        _debug_worktree_path = fallback
+        return _debug_worktree_path
 
 
 # =============================================================================
@@ -421,10 +456,15 @@ async def _stream_claude_response(
         logger.error("No user message found in messages list")
         raise ValueError("No user message found")
 
+    # Get debug worktree path for isolated execution
+    debug_worktree = _get_debug_worktree()
+    logger.info(f"Using debug worktree: {debug_worktree}")
+
     # Configure options with subscription token (OAuth token)
     logger.info(f"Configuring Claude SDK with subscription token: {subscription_token[:20]}...")
     options = ClaudeAgentOptions(
         max_turns=10,
+        cwd=str(debug_worktree),  # Run in isolated debug worktree
         env={"CLAUDE_CODE_OAUTH_TOKEN": subscription_token},
         permission_mode="bypassPermissions",
         max_thinking_tokens=10000,  # Enable thinking blocks in responses (10k tokens)

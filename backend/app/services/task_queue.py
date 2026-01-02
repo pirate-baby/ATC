@@ -100,6 +100,34 @@ async def run_plan_generation(
         subscription_token, token_id = token_result
         logger.info(f"Using subscription token {token_id} for plan generation {plan_id}")
 
+        # Get project git_url and create temp worktree for plan generation
+        from app.models.project import Project
+        from app.services.git import GitService
+
+        project = db.scalar(select(Project).where(Project.id == plan.project_id))
+        if not project or not project.git_url:
+            logger.error(f"Project not found or missing git_url for plan {plan_id}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = "Project not found or missing git repository URL"
+            db.commit()
+            return {"success": False, "error": "Project not found or missing git repository URL"}
+
+        # Create temp worktree for this project
+        git_service = GitService(settings.worktrees_base_path)
+        try:
+            worktree_path = git_service.get_or_create_temp_worktree(
+                project_id=plan.project_id,
+                git_url=project.git_url,
+                base_branch="main",
+            )
+            logger.info(f"Using temp worktree for plan generation: {worktree_path}")
+        except Exception as e:
+            logger.error(f"Failed to create temp worktree for plan {plan_id}: {e!r}", exc_info=True)
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = f"Failed to create worktree: {e}"
+            db.commit()
+            return {"success": False, "error": f"Failed to create worktree: {e}"}
+
         try:
             result = await claude_service.generate_plan(
                 plan_id=plan_uuid,
@@ -107,6 +135,7 @@ async def run_plan_generation(
                 context=context,
                 project_context=project_context,
                 subscription_token=subscription_token,
+                cwd=str(worktree_path),
             )
 
             plan.content = result.content
@@ -214,6 +243,34 @@ async def run_task_spawning(
         subscription_token, token_id = token_result
         logger.info(f"Using subscription token {token_id} for task spawning {plan_id}")
 
+        # Get project git_url and create temp worktree for task generation
+        from app.models.project import Project
+        from app.services.git import GitService
+
+        project = db.scalar(select(Project).where(Project.id == project_uuid))
+        if not project or not project.git_url:
+            logger.error(f"Project not found or missing git_url for plan {plan_id}")
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = "Project not found or missing git repository URL"
+            db.commit()
+            return {"success": False, "error": "Project not found or missing git repository URL"}
+
+        # Create temp worktree for this project
+        git_service = GitService(settings.worktrees_base_path)
+        try:
+            worktree_path = git_service.get_or_create_temp_worktree(
+                project_id=project_uuid,
+                git_url=project.git_url,
+                base_branch="main",
+            )
+            logger.info(f"Using temp worktree for task generation: {worktree_path}")
+        except Exception as e:
+            logger.error(f"Failed to create temp worktree for plan {plan_id}: {e!r}", exc_info=True)
+            plan.processing_status = ProcessingStatus.FAILED
+            plan.processing_error = f"Failed to create worktree: {e}"
+            db.commit()
+            return {"success": False, "error": f"Failed to create worktree: {e}"}
+
         try:
             result = await claude_service.generate_tasks(
                 plan_id=plan_uuid,
@@ -221,6 +278,7 @@ async def run_task_spawning(
                 content=content,
                 project_context=project_context,
                 subscription_token=subscription_token,
+                cwd=str(worktree_path),
             )
 
             logger.info(f"Claude returned {len(result.tasks)} tasks for plan_id={plan_id}")

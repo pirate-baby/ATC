@@ -92,6 +92,7 @@ async def generate_plan_content(
     context: str | None = None,
     project_context: str | None = None,
     subscription_token: str | None = None,
+    cwd: str | None = None,
 ) -> GenerationResult:
     """Generate plan content using the Claude Agent SDK.
 
@@ -101,6 +102,7 @@ async def generate_plan_content(
         context: Additional context provided by the user
         project_context: Context about the project (e.g., repository info)
         subscription_token: Claude Code subscription token from pool rotation
+        cwd: Working directory for the agent (should be project worktree path)
 
     Returns:
         GenerationResult with the generated content
@@ -137,7 +139,7 @@ async def generate_plan_content(
             query,
         )
 
-        logger.info(f"Starting plan generation for plan_id={plan_id}, title='{title}'")
+        logger.info(f"Starting plan generation for plan_id={plan_id}, title='{title}', cwd={cwd}")
         logger.debug(f"Prompt length: {len(prompt)} characters")
 
         # Configure options for plan generation
@@ -145,6 +147,7 @@ async def generate_plan_content(
         # The CLI handles all API communication internally
         options = ClaudeAgentOptions(
             max_turns=1,  # Single turn for plan generation
+            cwd=cwd,  # Run in project worktree
             env={"ANTHROPIC_API_KEY": subscription_token},
         )
 
@@ -247,6 +250,7 @@ async def generate_tasks_from_plan(
     content: str,
     project_context: str | None = None,
     subscription_token: str | None = None,
+    cwd: str | None = None,
 ) -> TaskGenerationResult:
     """Generate tasks from an approved plan using Claude.
 
@@ -256,6 +260,7 @@ async def generate_tasks_from_plan(
         content: The plan content to decompose
         project_context: Context about the project
         subscription_token: Claude Code subscription token from pool rotation
+        cwd: Working directory for the agent (should be project worktree path)
 
     Returns:
         TaskGenerationResult with the generated tasks
@@ -289,7 +294,7 @@ async def generate_tasks_from_plan(
             query,
         )
 
-        logger.info(f"Starting task generation for plan_id={plan_id}, title='{title}'")
+        logger.info(f"Starting task generation for plan_id={plan_id}, title='{title}', cwd={cwd}")
         logger.debug(f"Prompt length: {len(prompt)} characters, content length: {len(content)} characters")
 
         # Configure options for task generation
@@ -297,6 +302,7 @@ async def generate_tasks_from_plan(
         # The CLI handles all API communication internally
         options = ClaudeAgentOptions(
             max_turns=1,
+            cwd=cwd,  # Run in project worktree
             env={"ANTHROPIC_API_KEY": subscription_token},
         )
 
@@ -452,6 +458,7 @@ class ClaudeService:
         context: str | None = None,
         project_context: str | None = None,
         subscription_token: str | None = None,
+        cwd: str | None = None,
     ) -> GenerationResult:
         """Generate plan content.
 
@@ -461,6 +468,7 @@ class ClaudeService:
             context: Additional user-provided context
             project_context: Project-specific context
             subscription_token: Claude Code subscription token from pool rotation
+            cwd: Working directory for the agent (should be project worktree path)
 
         Returns:
             GenerationResult with generated content
@@ -475,6 +483,7 @@ class ClaudeService:
             context=context,
             project_context=project_context,
             subscription_token=subscription_token,
+            cwd=cwd,
         )
 
     async def generate_tasks(
@@ -484,6 +493,7 @@ class ClaudeService:
         content: str,
         project_context: str | None = None,
         subscription_token: str | None = None,
+        cwd: str | None = None,
     ) -> TaskGenerationResult:
         """Generate tasks from an approved plan.
 
@@ -493,6 +503,7 @@ class ClaudeService:
             content: Plan content to decompose
             project_context: Project-specific context
             subscription_token: Claude Code subscription token from pool rotation
+            cwd: Working directory for the agent (should be project worktree path)
 
         Returns:
             TaskGenerationResult with generated tasks
@@ -507,6 +518,7 @@ class ClaudeService:
             content=content,
             project_context=project_context,
             subscription_token=subscription_token,
+            cwd=cwd,
         )
 
 

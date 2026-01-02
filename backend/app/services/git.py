@@ -720,3 +720,119 @@ class GitService:
         """
         worktree_path = self._get_worktree_path(project_id, task_id)
         return worktree_path if worktree_path.exists() else None
+
+    def ensure_debug_worktree(self, git_url: str, base_branch: str = "main") -> Path:
+        """Ensure a debug worktree exists for the debug console.
+
+        Creates a persistent worktree at /var/lib/atc/worktrees/debug for isolated
+        debugging without affecting the main repository. If it already exists,
+        just returns the path.
+
+        Args:
+            git_url: Git repository URL for the ATC project itself
+            base_branch: Base branch to use (default: main)
+
+        Returns:
+            Path to the debug worktree
+
+        Raises:
+            GitError: If worktree creation fails
+        """
+        debug_worktree_path = self.worktrees_base_path / "debug"
+
+        # If debug worktree already exists, return it
+        if debug_worktree_path.exists() and (debug_worktree_path / ".git").exists():
+            return debug_worktree_path
+
+        # Use a special "debug-repo" identifier for the bare repo
+        debug_bare_path = self.worktrees_base_path / "repos" / "debug-repo"
+
+        # Ensure bare repository exists
+        if not debug_bare_path.exists():
+            repo = clone_bare_repository(git_url, debug_bare_path)
+        else:
+            fetch_updates(debug_bare_path)
+            repo = Repo(debug_bare_path)
+
+        # Create debug worktree with a dedicated branch
+        debug_branch = "debug-worktree"
+
+        # Remove existing worktree if path exists but not valid
+        if debug_worktree_path.exists():
+            shutil.rmtree(debug_worktree_path, ignore_errors=True)
+
+        # Check if worktree is already tracked by git
+        if worktree_exists_at_path(repo, debug_worktree_path):
+            remove_worktree(repo, debug_worktree_path, force=True)
+
+        # Delete old branch if it exists
+        if branch_exists(repo, debug_branch):
+            delete_branch(repo, debug_branch, force=True)
+
+        # Create fresh debug worktree
+        create_worktree(repo, debug_worktree_path, debug_branch, base_branch)
+
+        return debug_worktree_path
+
+    def get_or_create_temp_worktree(
+        self,
+        project_id: UUID,
+        git_url: str,
+        base_branch: str = "main",
+    ) -> Path:
+        """Get or create a temporary worktree for a project (used by workers).
+
+        Creates a persistent temp worktree at /var/lib/atc/worktrees/temp/{project_id}
+        for worker operations that need to read the project code.
+
+        Args:
+            project_id: Project UUID
+            git_url: Git repository URL
+            base_branch: Base branch to use (default: main)
+
+        Returns:
+            Path to the temp worktree
+
+        Raises:
+            GitError: If worktree creation fails
+        """
+        temp_worktree_path = self.worktrees_base_path / "temp" / str(project_id)
+
+        # If temp worktree already exists and is valid, return it
+        if temp_worktree_path.exists() and (temp_worktree_path / ".git").exists():
+            # Fetch updates to ensure it's current
+            try:
+                repo_at_worktree = Repo(temp_worktree_path)
+                for remote in repo_at_worktree.remotes:
+                    remote.fetch(prune=True)
+                # Reset to base branch to ensure clean state
+                repo_at_worktree.git.checkout(base_branch)
+                repo_at_worktree.git.reset("--hard", f"origin/{base_branch}")
+            except Exception:
+                # If update fails, recreate the worktree
+                pass
+            else:
+                return temp_worktree_path
+
+        # Ensure bare repository exists
+        repo = self.ensure_repository(project_id, git_url)
+
+        # Temp branch name
+        temp_branch = f"temp-{str(project_id)[:8]}"
+
+        # Remove existing worktree if path exists but not valid
+        if temp_worktree_path.exists():
+            shutil.rmtree(temp_worktree_path, ignore_errors=True)
+
+        # Check if worktree is already tracked by git
+        if worktree_exists_at_path(repo, temp_worktree_path):
+            remove_worktree(repo, temp_worktree_path, force=True)
+
+        # Delete old branch if it exists
+        if branch_exists(repo, temp_branch):
+            delete_branch(repo, temp_branch, force=True)
+
+        # Create fresh temp worktree
+        create_worktree(repo, temp_worktree_path, temp_branch, base_branch)
+
+        return temp_worktree_path

@@ -312,26 +312,199 @@ Tools are accessed as `mcp__<server_name>__<tool_name>` in `allowed_tools`.
 
 ## Configuration Architecture
 
+### Workspace/Working Directory Configuration
+
+The Claude Agent SDK provides the `cwd` parameter to specify the working directory where the agent operates:
+
+**Type**: `str | Path | None`
+**Default**: `None` (uses current working directory of the calling process)
+
+#### Basic Usage
+
+```python
+from pathlib import Path
+from claude_agent_sdk import query, ClaudeAgentOptions
+
+# Using string path
+options = ClaudeAgentOptions(
+    cwd="/path/to/project"
+)
+
+# Using Path object
+options = ClaudeAgentOptions(
+    cwd=Path("/path/to/project")
+)
+
+async for message in query(
+    prompt="Analyze this codebase",
+    options=options
+):
+    print(message)
+```
+
+#### How It Works
+
+- All file operations (Read, Write, Edit, Glob, Grep) are executed relative to `cwd`
+- Bash commands run with `cwd` as the current working directory
+- When `cwd` is `None`, the agent operates in the calling process's current directory
+- The agent cannot access files outside `cwd` unless additional directories are specified via `add_dirs`
+
+#### Integration with Worktree Management
+
+In this codebase, we use git worktrees to isolate task execution:
+
+```python
+from app.services.git import GitService
+from uuid import UUID
+
+# Create worktree for a task
+git_service = GitService(worktrees_base_path=Path("/var/lib/atc/worktrees"))
+result = git_service.create_task_worktree(
+    project_id=UUID("..."),
+    task_id=UUID("..."),
+    task_title="Implement feature",
+    git_url="https://github.com/org/repo.git",
+    base_branch="main"
+)
+
+# Configure Claude to work in the task's worktree
+options = ClaudeAgentOptions(
+    cwd=result.worktree_path,  # e.g., "/var/lib/atc/worktrees/tasks/{project_id}/{task_id}"
+    allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+    permission_mode="acceptEdits"
+)
+
+async for message in query(
+    prompt="Implement the feature as described",
+    options=options
+):
+    print(message)
+```
+
+#### Additional Directories
+
+To grant access to directories outside the main `cwd`:
+
+```python
+options = ClaudeAgentOptions(
+    cwd="/path/to/project",
+    add_dirs=[
+        "/path/to/shared/libraries",
+        "/path/to/config"
+    ]
+)
+```
+
+#### Environment Variables
+
+The `env` parameter allows passing environment variables to the agent:
+
+```python
+options = ClaudeAgentOptions(
+    cwd="/path/to/project",
+    env={
+        "ANTHROPIC_API_KEY": subscription_token,
+        "NODE_ENV": "production",
+        "DATABASE_URL": "postgresql://..."
+    }
+)
+```
+
+**Important**: For Claude Code authentication, use `ANTHROPIC_API_KEY` in the `env` dict:
+
+```python
+# For subscription tokens (from claude setup-token)
+options = ClaudeAgentOptions(
+    env={"ANTHROPIC_API_KEY": subscription_token}
+)
+
+# Alternative for OAuth tokens (used in debug console)
+options = ClaudeAgentOptions(
+    env={"CLAUDE_CODE_OAUTH_TOKEN": oauth_token}
+)
+```
+
+#### Workspace Configuration Pattern for Worker Tasks
+
+When running agents in background workers (like ARQ workers), use this pattern:
+
+```python
+async def run_task_execution(
+    ctx: dict[str, Any],
+    task_id: str,
+    subscription_token: str,
+) -> dict[str, Any]:
+    """Execute a task using Claude Agent SDK in isolated worktree."""
+    from app.services.git import GitService
+    from claude_agent_sdk import query, ClaudeAgentOptions
+
+    # Get task details from database
+    task = get_task(task_id)
+
+    # Create or get worktree for this task
+    git_service = GitService(worktrees_base_path=Path("/var/lib/atc/worktrees"))
+    result = git_service.create_task_worktree(
+        project_id=task.project_id,
+        task_id=task.id,
+        task_title=task.title,
+        git_url=task.project.git_url,
+        base_branch=task.project.default_branch
+    )
+
+    # Configure agent to work in the task's worktree
+    options = ClaudeAgentOptions(
+        cwd=result.worktree_path,  # Isolated workspace
+        env={"ANTHROPIC_API_KEY": subscription_token},
+        allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        permission_mode="acceptEdits",
+        max_turns=50
+    )
+
+    # Run the agent
+    async for message in query(
+        prompt=task.description,
+        options=options
+    ):
+        # Process messages...
+        pass
+
+    return {"success": True, "worktree_path": result.worktree_path}
+```
+
 ### ClaudeAgentOptions
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `allowed_tools` | `list[str]` | List of allowed tool names |
-| `disallowed_tools` | `list[str]` | List of disallowed tool names |
-| `system_prompt` | `str \| SystemPromptPreset` | System prompt configuration |
-| `permission_mode` | `PermissionMode` | Permission mode for tool usage |
-| `mcp_servers` | `dict` | MCP server configurations |
-| `resume` | `str` | Session ID to resume |
-| `fork_session` | `bool` | Fork session when resuming |
-| `max_turns` | `int` | Maximum conversation turns |
-| `model` | `str` | Claude model to use |
-| `cwd` | `str \| Path` | Current working directory |
-| `env` | `dict[str, str]` | Environment variables |
-| `hooks` | `dict` | Hook configurations |
-| `can_use_tool` | `Callable` | Tool permission callback |
-| `agents` | `dict` | Programmatically defined subagents |
-| `setting_sources` | `list` | Which filesystem settings to load |
-| `sandbox` | `SandboxSettings` | Sandbox behavior configuration |
+Complete reference for all configuration parameters accepted by `ClaudeAgentOptions`:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `allowed_tools` | `list[str]` | `[]` | List of allowed tool names |
+| `disallowed_tools` | `list[str]` | `[]` | List of disallowed tool names |
+| `system_prompt` | `str \| SystemPromptPreset \| None` | `None` | System prompt configuration |
+| `permission_mode` | `PermissionMode \| None` | `None` | Permission mode for tool usage |
+| `mcp_servers` | `dict[str, McpServerConfig] \| str \| Path` | `{}` | MCP server configurations or path to config file |
+| `resume` | `str \| None` | `None` | Session ID to resume |
+| `fork_session` | `bool` | `False` | Fork session when resuming |
+| `continue_conversation` | `bool` | `False` | Continue the most recent conversation |
+| `max_turns` | `int \| None` | `None` | Maximum conversation turns |
+| `model` | `str \| None` | `None` | Claude model to use |
+| `output_format` | `OutputFormat \| None` | `None` | Define output format for agent results |
+| `permission_prompt_tool_name` | `str \| None` | `None` | MCP tool name for permission prompts |
+| **`cwd`** | **`str \| Path \| None`** | **`None`** | **Current working directory** |
+| `settings` | `str \| None` | `None` | Path to settings file |
+| `add_dirs` | `list[str \| Path]` | `[]` | Additional directories Claude can access |
+| **`env`** | **`dict[str, str]`** | **`{}`** | **Environment variables** |
+| `extra_args` | `dict[str, str \| None]` | `{}` | Additional CLI arguments |
+| `max_buffer_size` | `int \| None` | `None` | Maximum bytes when buffering CLI stdout |
+| `stderr` | `Callable[[str], None] \| None` | `None` | Callback function for stderr output |
+| `can_use_tool` | `CanUseTool \| None` | `None` | Tool permission callback function |
+| `hooks` | `dict[HookEvent, list[HookMatcher]] \| None` | `None` | Hook configurations |
+| `user` | `str \| None` | `None` | User identifier |
+| `include_partial_messages` | `bool` | `False` | Include partial message streaming events |
+| `agents` | `dict[str, AgentDefinition] \| None` | `None` | Programmatically defined subagents |
+| `plugins` | `list[SdkPluginConfig]` | `[]` | Load custom plugins from local paths |
+| `setting_sources` | `list[SettingSource] \| None` | `None` | Which filesystem settings to load (None = no settings) |
+| `sandbox` | `SandboxSettings \| None` | `None` | Sandbox behavior configuration |
+| `enable_file_checkpointing` | `bool` | `False` | Enable file change tracking for rewinding |
 
 ### Setting Sources
 
