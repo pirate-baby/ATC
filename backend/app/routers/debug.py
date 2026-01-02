@@ -23,6 +23,13 @@ from app.models.claude_token import ClaudeToken as ClaudeTokenModel
 from app.models.user import User as UserModel
 from app.routers.claude_tokens import get_available_token, record_token_usage
 from app.schemas.base import StandardError
+from app.services.claude_session import (
+    ClaudeRateLimitError,
+    ClaudeSession,
+    ClaudeSessionError,
+    SessionConfig,
+    session_manager,
+)
 from app.services.encryption import decrypt_token
 from app.services.git import GitService
 
@@ -216,8 +223,9 @@ async def debug_claude_console(websocket: WebSocket):
                 logger.debug(f"Received WebSocket message from user {current_user.id}: type={data.get('type')}")
 
                 if data.get("type") == "reset_session":
-                    # Reset the session
+                    # Reset the session using the session manager
                     session_id = None
+                    session_manager.reset_session("demo")
                     logger.info(f"Session reset for user {current_user.id}")
                     await websocket.send_json(
                         {"type": "session_reset", "timestamp": datetime.now(timezone.utc).isoformat()}
@@ -401,20 +409,14 @@ async def debug_claude_console(websocket: WebSocket):
 # =============================================================================
 
 
-class ClaudeRateLimitError(Exception):
-    """Raised when Claude API returns rate limit error."""
-
-    pass
-
-
 async def _stream_claude_response(
     subscription_token: str, messages: list[dict], session_id: str | None = None
 ) -> AsyncIterator[dict]:
     """
     Stream Claude Code Agent SDK responses with session continuity.
 
-    This uses the Claude Agent SDK to stream responses with thoughts and outputs.
-    Uses subscription tokens (OAuth tokens starting with sk-ant-oat01-).
+    This is now a thin wrapper around ClaudeSession for backwards compatibility.
+    Uses the ClaudeSession class to manage session state independently of WebSocket.
 
     Args:
         subscription_token: Claude OAuth token for authentication
@@ -424,25 +426,6 @@ async def _stream_claude_response(
     Yields:
         Message dictionaries with type, content, and timestamp
     """
-    logger.debug(f"Initializing Claude Agent SDK stream with {len(messages)} messages, session_id={session_id}")
-
-    try:
-        from claude_agent_sdk import (
-            AssistantMessage,
-            ClaudeAgentOptions,
-            SystemMessage,
-            TextBlock,
-            ThinkingBlock,
-            ToolUseBlock,
-            query,
-        )
-    except ImportError as e:
-        logger.error(f"Claude Agent SDK not installed: {e!r}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Claude Agent SDK not installed",
-        ) from e
-
     # Extract the last user message as the prompt
     # When resuming, the SDK automatically loads full conversation history,
     # so we only need to provide the new user message
@@ -460,117 +443,39 @@ async def _stream_claude_response(
     debug_worktree = _get_debug_worktree()
     logger.info(f"Using debug worktree: {debug_worktree}")
 
-    # Configure options with subscription token (OAuth token)
-    logger.info(f"Configuring Claude SDK with subscription token: {subscription_token[:20]}...")
-    options = ClaudeAgentOptions(
+    # Create session config
+    config = SessionConfig(
+        subscription_token=subscription_token,
+        cwd=debug_worktree,
         max_turns=10,
-        cwd=str(debug_worktree),  # Run in isolated debug worktree
-        env={"CLAUDE_CODE_OAUTH_TOKEN": subscription_token},
+        max_thinking_tokens=10000,
         permission_mode="bypassPermissions",
-        max_thinking_tokens=10000,  # Enable thinking blocks in responses (10k tokens)
     )
 
-    # If we have a session_id, resume the session to maintain conversation history
-    if session_id:
-        logger.info(f"Resuming session: {session_id}")
-        options.resume = session_id
+    # Get or create session using the demo session key
+    # For debug console, we use a hardcoded session key
+    session_key = "demo"
+    session = session_manager.get_or_create_session(
+        session_key=session_key,
+        config=config,
+        sdk_session_id=session_id,
+    )
 
-    # Stream responses with delta tracking to avoid content duplication
-    try:
-        logger.info(
-            f"Starting Claude SDK query with message length: {len(str(last_user_message))}, "
-            f"resume={'yes' if session_id else 'no'}"
-        )
+    # Stream messages from the session
+    async for message in session.send_message(last_user_message):
+        # Convert SessionMessage to dict for backwards compatibility
+        result = {"type": message.type}
+        if message.content is not None:
+            result["content"] = message.content
+        if message.timestamp is not None:
+            result["timestamp"] = message.timestamp
+        if message.session_id is not None:
+            result["session_id"] = message.session_id
+        if message.tool is not None:
+            result["tool"] = message.tool
+        if message.input is not None:
+            result["input"] = message.input
+        if message.question is not None:
+            result["question"] = message.question
 
-        message_count = 0
-        # Track previous lengths for each block to send only deltas
-        thinking_blocks_prev_len: dict[int, int] = {}
-        text_blocks_prev_len: dict[int, int] = {}
-
-        async for message in query(prompt=last_user_message, options=options):
-            timestamp = datetime.now(timezone.utc).isoformat()
-
-            # Capture session_id from system init message
-            if isinstance(message, SystemMessage):
-                if hasattr(message, "subtype") and message.subtype == "init":
-                    init_session_id = getattr(message, "session_id", None)
-                    if not init_session_id and hasattr(message, "data"):
-                        init_session_id = message.data.get("session_id")
-                    if init_session_id:
-                        logger.info(f"Captured new session_id from init message: {init_session_id}")
-                        yield {
-                            "type": "session_init",
-                            "session_id": init_session_id,
-                            "timestamp": timestamp,
-                        }
-
-            if isinstance(message, AssistantMessage):
-                for idx, block in enumerate(message.content):
-                    if isinstance(block, ThinkingBlock):
-                        # Get the full content and calculate delta
-                        full_content = block.thinking
-                        prev_len = thinking_blocks_prev_len.get(idx, 0)
-                        delta = full_content[prev_len:]
-
-                        if delta:  # Only send if there's new content
-                            message_count += 1
-                            logger.debug(
-                                f"Yielding thought delta #{message_count}: "
-                                f"{len(delta)} new chars (total: {len(full_content)})"
-                            )
-                            yield {
-                                "type": "thought",
-                                "content": delta,
-                                "timestamp": timestamp,
-                            }
-                            thinking_blocks_prev_len[idx] = len(full_content)
-
-                    elif isinstance(block, TextBlock):
-                        # Get the full content and calculate delta
-                        full_content = block.text
-                        prev_len = text_blocks_prev_len.get(idx, 0)
-                        delta = full_content[prev_len:]
-
-                        if delta:  # Only send if there's new content
-                            message_count += 1
-                            logger.debug(
-                                f"Yielding text delta #{message_count}: "
-                                f"{len(delta)} new chars (total: {len(full_content)})"
-                            )
-                            yield {
-                                "type": "output",
-                                "content": delta,
-                                "timestamp": timestamp,
-                            }
-                            text_blocks_prev_len[idx] = len(full_content)
-
-                    elif isinstance(block, ToolUseBlock):
-                        # Send tool use information to frontend
-                        message_count += 1
-                        logger.debug(
-                            f"Yielding tool_use #{message_count}: {block.name}"
-                        )
-
-                        # Special handling for AskUserQuestion tool
-                        if block.name == "AskUserQuestion":
-                            yield {
-                                "type": "user_question",
-                                "question": block.input.get("question", ""),
-                                "timestamp": timestamp,
-                            }
-                        else:
-                            yield {
-                                "type": "tool_use",
-                                "tool": block.name,
-                                "input": block.input,
-                                "timestamp": timestamp,
-                            }
-
-        logger.info(f"Claude SDK stream completed successfully with {message_count} message deltas")
-
-    except Exception as e:
-        error_str = str(e).lower()
-        logger.error(f"Error in Claude SDK stream: {e!r}", exc_info=True)
-        if "rate" in error_str and "limit" in error_str:
-            raise ClaudeRateLimitError(str(e)) from e
-        raise
+        yield result
