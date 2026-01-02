@@ -22,12 +22,14 @@ interface ChatMessage {
 }
 
 interface StreamMessage {
-  type: 'thought' | 'output' | 'error' | 'done' | 'status'
+  type: 'thought' | 'output' | 'error' | 'done' | 'status' | 'tool_use'
   content?: string
   thinking?: string
   output?: string
   error?: string
   status?: string
+  tool?: string
+  input?: Record<string, any>
   timestamp: string
 }
 
@@ -153,6 +155,12 @@ export function ClaudeCodeConsolePage() {
         // Append to current output message
         currentOutputRef.current += (msg.content || msg.output || '')
         updateOutputMessage()
+        break
+
+      case 'tool_use':
+        // Log tool use but don't display to user (tools are implementation details)
+        console.log('🔧 Tool used:', msg.tool, msg.input)
+        // Don't change isStreaming state - let the session continue
         break
 
       case 'error':
