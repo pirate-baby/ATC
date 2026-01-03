@@ -179,19 +179,29 @@ export function ClaudeCodeConsolePage() {
       case 'user_question':
         // Display user question prominently
         console.log('❓ Claude is asking:', msg.question)
-        setMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: msg.question || 'Question from Claude',
-            timestamp: msg.timestamp,
-            messageType: 'user_question',
-          }
-        ])
-        // Scroll to bottom to show the question
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        }, 100)
+        if (currentThinkingRef.current) {
+          finalizeThinkingMessage()
+        }
+        if (currentOutputRef.current) {
+          finalizeOutputMessage()
+        }
+        const questionContent = msg.question || msg.content
+        if (questionContent) {
+          setMessages(prev => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: questionContent,
+              timestamp: msg.timestamp,
+              messageType: 'user_question',
+            }
+          ])
+          // Scroll to bottom to show the question
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+          }, 100)
+        }
+        setIsStreaming(false)
         break
 
       case 'error':
@@ -302,13 +312,15 @@ export function ClaudeCodeConsolePage() {
     currentOutputRef.current = ''
 
     // Send to WebSocket
+    // Note: Backend session manager maintains conversation history,
+    // so we only send the new user message
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const payload = {
         type: 'chat',
-        messages: [...messages, userMessage].map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
+        messages: [{
+          role: userMessage.role,
+          content: userMessage.content,
+        }],
         use_token_id: selectedTokenId,
       }
 
@@ -434,7 +446,7 @@ export function ClaudeCodeConsolePage() {
                     <span className="tool-use-label">🔧 tool use</span>
                   )}
                   {msg.messageType === 'user_question' && (
-                    <span className="user-question-label">❓ Claude is asking you a question</span>
+                    <span className="user-question-label">❓ question</span>
                   )}
                   {isStreaming && idx === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="working-indicator">
