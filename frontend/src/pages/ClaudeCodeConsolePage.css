@@ -102,6 +102,13 @@
   border-style: dashed !important;
 }
 
+.message-tool-use {
+  opacity: 0.7;
+  background: var(--bg-secondary, #f6f8fa) !important;
+  border-style: dashed !important;
+  border-color: #d1d5da !important;
+}
+
 .message-user-question {
   background: #fff3cd !important;
   border: 2px solid #ffc107 !important;
@@ -199,6 +206,7 @@
   font-size: 0.75rem;
   color: var(--text-secondary, #586069);
   font-weight: normal;
+  opacity: 0.8;
 }
 
 .collapse-toggle {

@@ -18,7 +18,7 @@ interface ChatMessage {
   timestamp: string
   messageType?: 'thinking' | 'output' | 'user_question' | 'tool_use' // Type of assistant message
   isThinking?: boolean // For current streaming thinking message
-  isCollapsed?: boolean // For thinking messages - whether they are collapsed
+  isCollapsed?: boolean // For thinking and tool_use messages - whether they are collapsed
   toolName?: string // For tool_use messages
   toolInput?: Record<string, any> // For tool_use messages
 }
@@ -161,17 +161,18 @@ export function ClaudeCodeConsolePage() {
         break
 
       case 'tool_use':
-        // Display tool use as a message
+        // Display tool use as a message (collapsed by default)
         console.log('🔧 Tool used:', msg.tool, msg.input)
         setMessages(prev => [
           ...prev,
           {
             role: 'assistant',
-            content: `Using tool: ${msg.tool}`,
+            content: `Using tool: ${msg.tool}${msg.input ? '\n\nInput:\n' + JSON.stringify(msg.input, null, 2) : ''}`,
             timestamp: msg.timestamp,
             messageType: 'tool_use',
             toolName: msg.tool,
             toolInput: msg.input,
+            isCollapsed: true, // Collapse by default
           }
         ])
         break
@@ -344,7 +345,7 @@ export function ClaudeCodeConsolePage() {
   const toggleThinkingCollapse = (index: number) => {
     setMessages(prev => {
       const newMessages = [...prev]
-      if (newMessages[index] && newMessages[index].messageType === 'thinking') {
+      if (newMessages[index] && (newMessages[index].messageType === 'thinking' || newMessages[index].messageType === 'tool_use')) {
         newMessages[index] = {
           ...newMessages[index],
           isCollapsed: !newMessages[index].isCollapsed,
@@ -443,7 +444,16 @@ export function ClaudeCodeConsolePage() {
                     </>
                   )}
                   {msg.messageType === 'tool_use' && (
-                    <span className="tool-use-label">🔧 tool use</span>
+                    <>
+                      <span className="tool-use-label">🔧 tool use</span>
+                      <button
+                        className="collapse-toggle"
+                        onClick={() => toggleThinkingCollapse(idx)}
+                        aria-label={msg.isCollapsed ? 'Expand tool use' : 'Collapse tool use'}
+                      >
+                        {msg.isCollapsed ? '▶' : '▼'}
+                      </button>
+                    </>
                   )}
                   {msg.messageType === 'user_question' && (
                     <span className="user-question-label">❓ question</span>
@@ -459,7 +469,20 @@ export function ClaudeCodeConsolePage() {
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
               </div>
-              {!(msg.messageType === 'thinking' && msg.isCollapsed) && (
+              {msg.messageType === 'tool_use' && msg.isCollapsed ? (
+                <div className="message-collapsed">
+                  {msg.toolName && (
+                    <span>
+                      {msg.toolName}
+                      {msg.toolInput && Object.keys(msg.toolInput).length > 0 && (
+                        <span style={{ opacity: 0.6, marginLeft: '0.5rem' }}>
+                          ({Object.keys(msg.toolInput).slice(0, 2).join(', ')}{Object.keys(msg.toolInput).length > 2 ? ', ...' : ''})
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+              ) : !(msg.messageType === 'thinking' && msg.isCollapsed) && (
                 <div className={`message-content ${msg.messageType === 'thinking' ? 'thinking-content' : ''}`}>
                   <pre>{msg.content}</pre>
                 </div>
